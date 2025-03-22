@@ -1,0 +1,31 @@
+# https://goframe.org/docs/web/server-config-file-template
+server:
+  address:     ":8000"
+  openapiPath: "/api.json"
+  swaggerPath: "/swagger"
+
+# https://goframe.org/docs/core/glog-config
+logger:
+  level : "all"
+  stdout: true
+
+# https://goframe.org/docs/core/gdb-config-file
+database:
+  default:
+    # link: "mysql:用户名:密码@tcp(数据库IP:端口)/数据库名?charset=utf8mb4&parseTime=True&loc=Local"
+    link: "mysql:root:1qaz@WSX3edc@tcp(124.221.133.54:3307)/lianghao?charset=utf8mb4&parseTime=True&loc=Local"
+
+# 添加到现有配置文件中
+tron:
+   # pipei 模式配置
+  pipei:
+    runMinutes: 10  # 程序运行10分钟后重启
+    recordThreshold: 2  # 当新增记录超过10条时重启
+    gpuCount: 1     # 要跑的卡数量
+  
+  # lianghao 模式配置
+  lianghao:
+    runMinutes: 15  # 程序运行15分钟后重启
+    recordThreshold: 2  # 当新增记录超过10条时重启
+    gpuCount: 1     # 要跑的卡数量
+    suffix: "5"  # 靓号尾数
