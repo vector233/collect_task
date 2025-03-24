@@ -75,7 +75,7 @@ func RunTronPipei(ctx context.Context, parser *gcmd.Parser) (err error) {
 
 // 执行一次前3后4匹配操作
 func runOnePipeiMatch(ctx context.Context, gpuCount int, deadline time.Time, initialRecordCount int, recordThreshold int, startTime *gtime.Time) error {
-	// 获取匹配模式
+	// 获取匹配任务
 	pipeiPatterns, err := getPatterns(ctx)
 	if err != nil {
 		return err
@@ -112,14 +112,14 @@ func runOnePipeiMatch(ctx context.Context, gpuCount int, deadline time.Time, ini
 	tempInputFile := filepath.Join(tempDir, "input.txt")
 	tempOutputFile := filepath.Join(tempDir, "output.txt")
 
-	// 将所有匹配模式写入同一个输入文件
+	// 将所有匹配任务写入同一个输入文件
 	var inputContent strings.Builder
 
 	for _, pattern := range pipeiPatterns {
 		inputContent.WriteString(pattern.FromAddressPart + "\n")
 	}
 
-	// 写入所有模式到临时文件
+	// 写入所有任务到临时文件
 	if err := gfile.PutContents(tempInputFile, inputContent.String()); err != nil {
 		return fmt.Errorf("写入临时文件失败: %v", err)
 	}
@@ -129,7 +129,7 @@ func runOnePipeiMatch(ctx context.Context, gpuCount int, deadline time.Time, ini
 	go monitorExternalConditions(ctxWithCancel, stopChan, deadline, initialRecordCount, recordThreshold, ctx, startTime)
 
 	// 启动文件监视器，监视共用的输出文件
-	go watchOutputFile(tempOutputFile, "", ctxWithCancel, resultChan, 0)
+	go watchOutputFile(ctxWithCancel, tempOutputFile, resultChan, 0)
 
 	// 执行单个命令处理所有任务
 	var wg sync.WaitGroup
@@ -163,7 +163,7 @@ func runOnePipeiMatch(ctx context.Context, gpuCount int, deadline time.Time, ini
 	}()
 
 	// 等待任务完成或外部条件触发
-	waitForCompletionOrTermination(ctxWithCancel, &wg, stopChan, cancel)
+	waitForCompletionOrTermination(&wg, stopChan, cancel)
 
 	// 等待数据库处理goroutine完成
 	close(resultChan)

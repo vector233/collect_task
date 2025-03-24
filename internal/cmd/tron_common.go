@@ -115,7 +115,7 @@ func processResultsAndSaveToDB(ctx context.Context, resultChan <-chan MatchResul
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
-	// 创建模式匹配映射
+	// 创建任务map，用于正则判断结果是否属于该任务
 	patternMap := make(map[string]*entity.TOrderAddressRecordResult)
 	for _, p := range patterns {
 		patternMap[p.FromAddressPart] = p
@@ -127,7 +127,7 @@ func processResultsAndSaveToDB(ctx context.Context, resultChan <-chan MatchResul
 			for _, matchResult := range resultBatch {
 				// 解析地址和私钥
 				parts := strings.Split(matchResult.Result, "---")
-				address := matchResult.Pattern // 地址部分已经在watchOutputFile中提取
+				address := matchResult.Pattern // 地址
 				privateAddress := ""
 				if len(parts) > 1 {
 					privateAddress = parts[1]
@@ -136,13 +136,13 @@ func processResultsAndSaveToDB(ctx context.Context, resultChan <-chan MatchResul
 				// 使用本地时区的当前时间
 				now := gtime.Now().Local()
 
-				// 查找匹配的模式
+				// 匹配到的任务
 				var matchedPattern string
 				var matchedRecord *entity.TOrderAddressRecordResult
 
-				// 遍历所有模式，查找匹配的模式
+				// 遍历所有任务，查找匹配的模式
 				for pattern, record := range patternMap {
-					// 检查模式是否匹配地址
+					// 检查任务是否匹配地址
 					if matchesPattern(address, pattern) {
 						matchedPattern = pattern
 						matchedRecord = record
@@ -150,9 +150,9 @@ func processResultsAndSaveToDB(ctx context.Context, resultChan <-chan MatchResul
 					}
 				}
 
-				// 如果找不到匹配的模式，则忽略该结果
+				// 如果找不到匹配的任务，则忽略该结果
 				if matchedPattern == "" || matchedRecord == nil {
-					fmt.Printf("找不到匹配的任务模式，忽略结果: Address=%s\n", address)
+					// fmt.Printf("找不到匹配的任务模式，忽略结果: Address=%s\n", address)
 					continue
 				}
 
@@ -161,7 +161,7 @@ func processResultsAndSaveToDB(ctx context.Context, resultChan <-chan MatchResul
 					// 更新记录
 					_, err := dao.TOrderAddressRecordResult.Ctx(dbCtx).
 						Data(g.Map{
-							"address":            matchResult.Result,
+							"address":            address,
 							"private_address":    privateAddress,
 							"match_success_time": now,
 						}).
@@ -171,8 +171,8 @@ func processResultsAndSaveToDB(ctx context.Context, resultChan <-chan MatchResul
 					if err != nil {
 						fmt.Printf("更新结果到数据库失败: %v\n", err)
 					}
-				} else {
-					fmt.Printf("任务记录已有结果，忽略更新: FromAddressPart=%s\n", matchedPattern)
+					//} else {
+					//fmt.Printf("任务记录已有结果，忽略更新: FromAddressPart=%s\n", matchedPattern)
 				}
 			}
 
@@ -192,9 +192,6 @@ func processResultsAndSaveToDB(ctx context.Context, resultChan <-chan MatchResul
 				return
 			}
 
-			// 打印调试信息
-			fmt.Printf("解析结果: 地址=%s\n", matchResult.Pattern)
-
 			// 添加到批处理
 			resultBatch = append(resultBatch, matchResult)
 
@@ -209,14 +206,14 @@ func processResultsAndSaveToDB(ctx context.Context, resultChan <-chan MatchResul
 	}
 }
 
-// 检查地址是否匹配模式
+// 检查地址是否匹配任务
 func matchesPattern(address, pattern string) bool {
 	// 如果模式中不包含通配符，则直接比较
 	if !strings.Contains(pattern, "*") {
 		return address == pattern
 	}
 
-	// 将模式转换为正则表达式
+	// 将任务转换为正则表达式
 	regexPattern := strings.Replace(pattern, "*", ".*", -1)
 	regexPattern = "^" + regexPattern + "$"
 
@@ -238,26 +235,25 @@ func monitorExternalConditions(ctx context.Context, stopChan chan<- struct{}, de
 		case <-time.After(10 * time.Second): // 每10秒检查一次
 			// 检查是否已经到达截止时间
 			if time.Now().After(deadline) {
-				fmt.Println("已达到设定的运行时间，准备终止任务...")
+				fmt.Println("已达到设定的运行时间，准备终止程序...")
 				close(stopChan)
 				return
 			}
 
-			// 检查记录数是否超过阈值（只统计本轮开始后新增的待匹配任务）
-			currentRecordCount, err := dao.TOrderAddressRecordResult.Ctx(dbCtx).
+			// 检查任务数是否超过阈值（只统计本轮开始后新增的待计算任务）
+			newRecords, err := dao.TOrderAddressRecordResult.Ctx(dbCtx).
 				Where("(address IS NULL OR address = '') AND create_time > ?", startTime).
 				Count()
 			if err != nil {
-				fmt.Printf("获取当前记录数失败: %v\n", err)
+				fmt.Printf("获取当前任务数失败: %v\n", err)
 			} else {
-				// 新增记录数就是当前查询到的记录数
-				newRecords := currentRecordCount
-				fmt.Printf("本轮开始后新增待匹配记录数: %d, 阈值: %d\n",
-					newRecords, recordThreshold)
+				//newRecords := currentRecordCount
+				//fmt.Printf("本轮开始后新增待匹配记录数: %d, 阈值: %d\n",
+				//	newRecords, recordThreshold)
 
 				// 如果新增记录数超过阈值，则准备终止任务
 				if newRecords >= recordThreshold {
-					fmt.Printf("新增待匹配记录数 %d 超过阈值 %d，准备终止任务...\n", newRecords, recordThreshold)
+					fmt.Printf("新增待匹配任务数 %d 超过阈值 %d，准备终止任务...\n", newRecords, recordThreshold)
 					close(stopChan)
 					return
 				}
@@ -267,7 +263,7 @@ func monitorExternalConditions(ctx context.Context, stopChan chan<- struct{}, de
 }
 
 // 等待任务完成或终止
-func waitForCompletionOrTermination(ctx context.Context, wg *sync.WaitGroup, stopChan <-chan struct{}, cancelFunc context.CancelFunc) {
+func waitForCompletionOrTermination(wg *sync.WaitGroup, stopChan <-chan struct{}, cancelFunc context.CancelFunc) {
 	waitChan := make(chan struct{})
 	go func() {
 		wg.Wait()
@@ -284,12 +280,9 @@ func waitForCompletionOrTermination(ctx context.Context, wg *sync.WaitGroup, sto
 }
 
 // 监视输出文件
-func watchOutputFile(outputFile, pattern string, ctx context.Context, resultChan chan<- MatchResult, idx int) {
+func watchOutputFile(ctx context.Context, outputFile string, resultChan chan<- MatchResult, idx int) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
-
-	// 记录已处理的行数
-	var processedLines int
 
 	for {
 		select {
@@ -301,48 +294,66 @@ func watchOutputFile(outputFile, pattern string, ctx context.Context, resultChan
 				continue
 			}
 
-			// 读取文件内容
-			var lines []string
-			err := gfile.ReadLines(outputFile, func(line string) error {
-				if line != "" {
-					lines = append(lines, line)
-				}
-				return nil
-			})
-			if err != nil {
-				fmt.Printf("读取结果文件失败 [%d]: %v\n", idx, err)
+			// 读取原文件内容
+			content := gfile.GetContents(outputFile)
+
+			// 如果文件为空，则继续
+			if content == "" {
 				continue
 			}
 
-			// 处理新的行
-			for i := processedLines; i < len(lines); i++ {
-				if lines[i] != "" {
-					// 解析行内容，格式应该是 "地址---私钥"
-					parts := strings.SplitN(lines[i], "---", 2)
-					if len(parts) >= 2 {
-						// 获取地址部分作为匹配模式
-						addressPart := parts[0]
+			// 将内容分割为行
+			lines := strings.Split(content, "\n")
+			var processedLines []string
 
-						// 创建匹配结果结构体
-						matchResult := MatchResult{
-							Pattern: addressPart, // 使用地址部分作为模式
-							Result:  lines[i],    // 保存完整结果
-						}
+			// 处理所有行
+			for _, line := range lines {
+				if line == "" {
+					continue // 跳过空行
+				}
 
-						select {
-						case resultChan <- matchResult:
-							fmt.Printf("发送结果到处理通道: %s\n", addressPart)
-						case <-ctx.Done():
-							return
-						}
-					} else {
-						fmt.Printf("无法解析结果行: %s\n", lines[i])
+				// 解析行内容，格式应该是 "地址---私钥"
+				parts := strings.SplitN(line, "---", 2)
+				if len(parts) >= 2 {
+					// 获取地址部分作为匹配模式
+					addressPart := parts[0]
+
+					// 创建匹配结果结构体
+					matchResult := MatchResult{
+						Pattern: addressPart, // 使用地址部分作为模式
+						Result:  line,        // 保存完整结果
 					}
+
+					// 尝试发送到处理通道
+					select {
+					case resultChan <- matchResult:
+						fmt.Printf("发送结果到处理通道: %s\n", addressPart)
+						processedLines = append(processedLines, line) // 记录已处理的行
+					case <-ctx.Done():
+						return
+					}
+				} else {
+					fmt.Printf("无法解析结果行: %s\n", line)
 				}
 			}
 
-			// 更新已处理的行数
-			processedLines = len(lines)
+			// 如果有处理过的行
+			if len(processedLines) > 0 {
+				// 读取原文件的最新内容（可能在处理过程中有新数据写入）
+				newContent := gfile.GetContents(outputFile)
+
+				// 从最新内容中移除已处理的行
+				for _, processedLine := range processedLines {
+					newContent = strings.Replace(newContent, processedLine+"\n", "", 1)
+					newContent = strings.Replace(newContent, processedLine, "", 1) // 处理可能的最后一行没有换行符的情况
+				}
+
+				// 写回处理后的内容
+				err := gfile.PutContents(outputFile, newContent)
+				if err != nil {
+					fmt.Printf("写回结果文件失败 [%d]: %v\n", idx, err)
+				}
+			}
 		}
 	}
 }

@@ -92,7 +92,7 @@ func RunTronLianghao(ctx context.Context, parser *gcmd.Parser) (err error) {
 
 // 执行一次靓号匹配操作
 func runOneLianghaoMatch(ctx context.Context, gpuCount int, lianghao string, deadline time.Time, initialRecordCount int, recordThreshold int, startTime *gtime.Time) error {
-	// 获取匹配模式
+	// 获取匹配任务
 	lianghaoPatterns, err := getPatterns(ctx)
 	if err != nil {
 		return err
@@ -128,7 +128,7 @@ func runOneLianghaoMatch(ctx context.Context, gpuCount int, lianghao string, dea
 	// 创建共用的临时文件
 	tempInputFile := filepath.Join(tempDir, "input.txt")
 
-	// 将所有匹配模式写入同一个输入文件
+	// 将所有匹配任务写入同一个输入文件
 	var inputContent strings.Builder
 	patternMap := make(map[string]*entity.TOrderAddressRecordResult)
 
@@ -137,7 +137,7 @@ func runOneLianghaoMatch(ctx context.Context, gpuCount int, lianghao string, dea
 		patternMap[pattern.FromAddressPart] = pattern
 	}
 
-	// 写入所有模式到临时文件
+	// 写入所有任务到临时文件
 	if err := gfile.PutContents(tempInputFile, inputContent.String()); err != nil {
 		return fmt.Errorf("写入临时文件失败: %v", err)
 	}
@@ -150,7 +150,7 @@ func runOneLianghaoMatch(ctx context.Context, gpuCount int, lianghao string, dea
 	outputFile := filepath.Join(tronDir, "000.txt")
 
 	// 启动文件监视器，监视共用的输出文件
-	go watchOutputFile(outputFile, "", ctxWithCancel, resultChan, 0)
+	go watchOutputFile(ctxWithCancel, outputFile, resultChan, 0)
 
 	// 执行单个命令处理所有任务
 	var wg sync.WaitGroup
@@ -184,7 +184,7 @@ func runOneLianghaoMatch(ctx context.Context, gpuCount int, lianghao string, dea
 	}()
 
 	// 等待任务完成或外部条件触发
-	waitForCompletionOrTermination(ctxWithCancel, &wg, stopChan, cancel)
+	waitForCompletionOrTermination(&wg, stopChan, cancel)
 
 	// 等待数据库处理goroutine完成
 	close(resultChan)
