@@ -1,5 +1,14 @@
 # tron-lion
 
+## golang 安装
+1. 下载安装包 [golang 1.24](https://go.dev/dl/go1.24.1.windows-amd64.msi)
+2. 按步骤安装
+3. 安装完成后在项目目录下执行以下命令：
+```bash
+go mod download
+```
+4. 之后根据需要执行以下不同命令，编译不同的可执行exe文件
+
 ### 1. 前3后4地址匹配程序
 
 ```bash
