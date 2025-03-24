@@ -294,7 +294,10 @@ func watchOutputFile(ctx context.Context, outputFile string, resultChan chan<- M
 				continue
 			}
 
-			// 读取原文件内容
+			// 创建备份文件名
+			oldFile := outputFile + ".old"
+
+			// 先读取原文件内容
 			content := gfile.GetContents(outputFile)
 
 			// 如果文件为空，则继续
@@ -302,9 +305,24 @@ func watchOutputFile(ctx context.Context, outputFile string, resultChan chan<- M
 				continue
 			}
 
+			// 原文件重命名为 xxx.old
+			err := os.Rename(outputFile, oldFile)
+			if err != nil {
+				fmt.Printf("重命名原文件失败 [%d]: %v\n", idx, err)
+				continue
+			}
+
+			// 直接创建一个新的空文件（使用原文件名）
+			err = gfile.PutContents(outputFile, "")
+			if err != nil {
+				fmt.Printf("创建新文件失败 [%d]: %v\n", idx, err)
+				// 如果创建新文件失败，尝试恢复原文件
+				os.Rename(oldFile, outputFile)
+				continue
+			}
+
 			// 将内容分割为行
 			lines := strings.Split(content, "\n")
-			var processedLines []string
 
 			// 处理所有行
 			for _, line := range lines {
@@ -328,8 +346,9 @@ func watchOutputFile(ctx context.Context, outputFile string, resultChan chan<- M
 					select {
 					case resultChan <- matchResult:
 						fmt.Printf("发送结果到处理通道: %s\n", addressPart)
-						processedLines = append(processedLines, line) // 记录已处理的行
 					case <-ctx.Done():
+						// 删除临时文件
+						os.Remove(oldFile)
 						return
 					}
 				} else {
@@ -337,23 +356,8 @@ func watchOutputFile(ctx context.Context, outputFile string, resultChan chan<- M
 				}
 			}
 
-			// 如果有处理过的行
-			if len(processedLines) > 0 {
-				// 读取原文件的最新内容（可能在处理过程中有新数据写入）
-				newContent := gfile.GetContents(outputFile)
-
-				// 从最新内容中移除已处理的行
-				for _, processedLine := range processedLines {
-					newContent = strings.Replace(newContent, processedLine+"\n", "", 1)
-					newContent = strings.Replace(newContent, processedLine, "", 1) // 处理可能的最后一行没有换行符的情况
-				}
-
-				// 写回处理后的内容
-				err := gfile.PutContents(outputFile, newContent)
-				if err != nil {
-					fmt.Printf("写回结果文件失败 [%d]: %v\n", idx, err)
-				}
-			}
+			// 处理完成后删除旧文件
+			os.Remove(oldFile)
 		}
 	}
 }
