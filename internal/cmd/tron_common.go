@@ -389,7 +389,7 @@ func getPatterns(ctx context.Context) ([]*entity.TOrderAddressRecordResult, erro
 func getLimitedPatterns(ctx context.Context) ([]*entity.TOrderAddressRecordResult, error) {
 	var patterns []*entity.TOrderAddressRecordResult
 
-	limit := g.Cfg().MustGet(ctx, "tron.pipei.limit", 10).Int() // 默认10条
+	limit := g.Cfg().MustGet(ctx, "tron.pipei.limit", 30000).Int() // 默认30000条
 	// 如果限制为0或负数，则使用原有的不限制查询
 	if limit <= 0 {
 		return getPatterns(ctx)
