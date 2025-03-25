@@ -15,15 +15,15 @@ import (
 )
 
 var (
-	TronGenerate = gcmd.Command{
-		Name:  "generate",
-		Usage: "tron generate count prefix suffix",
+	TronGenerateA = gcmd.Command{
+		Name:  "gen_a",
+		Usage: "tron gen_a count prefix suffix",
 		Brief: "生成前X后Y格式的地址匹配规则并插入数据库",
-		Func:  runTronGenerate,
+		Func:  runTronGenerateA,
 	}
 )
 
-func runTronGenerate(ctx context.Context, parser *gcmd.Parser) (err error) {
+func runTronGenerateA(ctx context.Context, parser *gcmd.Parser) (err error) {
 	// 获取参数
 	count := parser.GetOpt("count").Int()
 	prefix := parser.GetOpt("prefix").Int()

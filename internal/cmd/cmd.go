@@ -29,8 +29,9 @@ func init() {
 	err := Main.AddCommand(
 		&TronPipei,
 		&TronLianghao,
-		&TronGenerate,
 		&TronTest,
+		&TronGenerateA,
+		&TronGenerateC,
 	)
 	if err != nil {
 		panic(err)

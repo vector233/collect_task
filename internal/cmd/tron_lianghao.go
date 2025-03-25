@@ -93,7 +93,7 @@ func RunTronLianghao(ctx context.Context, parser *gcmd.Parser) (err error) {
 // 执行一次靓号匹配操作
 func runOneLianghaoMatch(ctx context.Context, gpuCount int, lianghao string, deadline time.Time, initialRecordCount int, recordThreshold int, startTime *gtime.Time) error {
 	// 获取匹配任务
-	lianghaoPatterns, err := getPatterns(ctx)
+	lianghaoPatterns, err := getLimitedPatterns(ctx)
 	if err != nil {
 		return err
 	}

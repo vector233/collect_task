@@ -76,7 +76,7 @@ func RunTronPipei(ctx context.Context, parser *gcmd.Parser) (err error) {
 // 执行一次前3后4匹配操作
 func runOnePipeiMatch(ctx context.Context, gpuCount int, deadline time.Time, initialRecordCount int, recordThreshold int, startTime *gtime.Time) error {
 	// 获取匹配任务
-	pipeiPatterns, err := getPatterns(ctx)
+	pipeiPatterns, err := getLimitedPatterns(ctx)
 	if err != nil {
 		return err
 	}

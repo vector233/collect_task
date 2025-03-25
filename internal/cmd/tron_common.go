@@ -384,3 +384,25 @@ func getPatterns(ctx context.Context) ([]*entity.TOrderAddressRecordResult, erro
 	}
 	return patterns, nil
 }
+
+// 获取限制数量的待执行任务
+func getLimitedPatterns(ctx context.Context) ([]*entity.TOrderAddressRecordResult, error) {
+	var patterns []*entity.TOrderAddressRecordResult
+
+	limit := g.Cfg().MustGet(ctx, "tron.pipei.limit", 10).Int() // 默认10条
+	// 如果限制为0或负数，则使用原有的不限制查询
+	if limit <= 0 {
+		return getPatterns(ctx)
+	}
+
+	err := dao.TOrderAddressRecordResult.Ctx(ctx).
+		Where("address IS NULL OR address = ''").
+		Limit(limit).
+		Scan(&patterns)
+	if err != nil {
+		return nil, fmt.Errorf("获取任务失败: %v", err)
+	}
+
+	fmt.Printf("已获取 %d/%d 条待执行任务\n", len(patterns), limit)
+	return patterns, nil
+}
