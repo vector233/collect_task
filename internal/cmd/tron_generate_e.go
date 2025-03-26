@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/os/gcmd"
 	"github.com/gogf/gf/v2/os/gtime"
 
 	"github.com/bivdex/tron-lion/internal/dao"
-	"github.com/bivdex/tron-lion/internal/model/entity"
 )
 
 var (
@@ -27,8 +27,14 @@ var (
 )
 
 func runTronGenerateE(ctx context.Context, parser *gcmd.Parser) (err error) {
-	// 示例调用
-	address := "TDqSquXBgUCLYvYC4XZgrprLK589dkhSCf" // 替换为您要查询的地址
+	// 从配置中读取地址
+	address := g.Cfg().MustGet(ctx, "tron.address").String()
+	if address == "" {
+		return fmt.Errorf("未配置波场地址，请在配置文件中设置 tron.address")
+	}
+
+	fmt.Printf("正在处理波场地址: %s\n", address)
+
 	addresses, err := fetchAddresses(ctx, address)
 	if err != nil {
 		return err
@@ -36,69 +42,112 @@ func runTronGenerateE(ctx context.Context, parser *gcmd.Parser) (err error) {
 
 	fmt.Printf("找到 %d 个相关地址\n", len(addresses))
 
-	// 统计插入和已存在的地址数量
-	var insertCount, existCount int
+	// 批量查询数据库中已存在的地址
+	existingAddresses, err := batchCheckAddresses(ctx, addresses)
+	if err != nil {
+		return fmt.Errorf("批量查询地址失败: %v", err)
+	}
 
-	// 遍历所有地址并插入数据库
+	// 找出需要插入的新地址
+	var newAddresses []string
 	for _, addr := range addresses {
-		// 检查地址是否已存在
-		exists, err := checkAddressExists(ctx, addr)
-		if err != nil {
-			fmt.Printf("检查地址 %s 是否存在时出错: %v\n", addr, err)
-			continue
+		if _, exists := existingAddresses[addr]; !exists {
+			newAddresses = append(newAddresses, addr)
 		}
+	}
 
-		if exists {
-			existCount++
-			if existCount <= 10 { // 只打印前10个已存在的地址
-				fmt.Printf("地址已存在: %s\n", addr)
+	fmt.Printf("已存在 %d 个地址, 需要插入 %d 个新地址\n",
+		len(existingAddresses), len(newAddresses))
+
+	// 打印部分已存在的地址作为示例
+	if len(existingAddresses) > 0 {
+		fmt.Println("部分已存在的地址示例:")
+		i := 0
+		for addr := range existingAddresses {
+			if i < 10 { // 只打印前10个
+				fmt.Printf("  %s\n", addr)
+				i++
+			} else {
+				break
 			}
-			continue
+		}
+	}
+
+	// 如果有新地址需要插入
+	if len(newAddresses) > 0 {
+		// 批量插入新地址
+		if err := batchInsertAddresses(ctx, newAddresses); err != nil {
+			return fmt.Errorf("批量插入地址失败: %v", err)
 		}
 
-		// 插入新地址
-		if err := insertAddress(ctx, addr); err != nil {
-			fmt.Printf("插入地址 %s 时出错: %v\n", addr, err)
-			continue
-		}
-
-		insertCount++
-		if insertCount <= 10 { // 只打印前10个新插入的地址
-			fmt.Printf("成功插入地址: %s\n", addr)
+		// 打印部分新插入的地址作为示例
+		fmt.Println("部分新插入的地址示例:")
+		for i, addr := range newAddresses {
+			if i < 10 { // 只打印前10个
+				fmt.Printf("  %s\n", addr)
+			} else {
+				break
+			}
 		}
 	}
 
 	fmt.Printf("处理完成: 共找到 %d 个地址, 新插入 %d 个, 已存在 %d 个\n",
-		len(addresses), insertCount, existCount)
+		len(addresses), len(newAddresses), len(existingAddresses))
 
 	return nil
 }
 
-// 检查地址是否已存在于数据库
-func checkAddressExists(ctx context.Context, address string) (bool, error) {
-	count, err := dao.TOrderFromAddress.Ctx(ctx).
-		Where(dao.TOrderFromAddress.Columns().FromAddress, address).
-		Count()
-
-	if err != nil {
-		return false, fmt.Errorf("查询数据库失败: %v", err)
+// 批量检查地址是否存在于数据库
+func batchCheckAddresses(ctx context.Context, addresses []string) (map[string]struct{}, error) {
+	if len(addresses) == 0 {
+		return make(map[string]struct{}), nil
 	}
 
-	return count > 0, nil
+	// 查询数据库中已存在的地址
+	records, err := dao.TOrderFromAddress.Ctx(ctx).
+		Where(dao.TOrderFromAddress.Columns().FromAddress, addresses).
+		Fields(dao.TOrderFromAddress.Columns().FromAddress).
+		All()
+
+	if err != nil {
+		return nil, fmt.Errorf("查询数据库失败: %v", err)
+	}
+
+	// 将查询结果转换为map便于快速查找
+	existingAddresses := make(map[string]struct{}, len(records))
+	for _, record := range records {
+		addr := record["from_address"].String()
+		existingAddresses[addr] = struct{}{}
+	}
+
+	return existingAddresses, nil
 }
 
-// 将地址插入到数据库
-func insertAddress(ctx context.Context, address string) error {
-	// 创建新记录
-	data := &entity.TOrderFromAddress{
-		FromAddress: address,
-		CreateTime:  gtime.Now(),
+// 批量插入地址到数据库
+func batchInsertAddresses(ctx context.Context, addresses []string) error {
+	if len(addresses) == 0 {
+		return nil
 	}
 
-	// 插入数据库
-	_, err := dao.TOrderFromAddress.Ctx(ctx).Insert(data)
+	// 准备批量插入的数据
+	batch := make([]map[string]interface{}, 0, len(addresses))
+	now := gtime.Now()
+
+	for _, addr := range addresses {
+		batch = append(batch, map[string]interface{}{
+			dao.TOrderFromAddress.Columns().FromAddress: addr,
+			dao.TOrderFromAddress.Columns().CreateTime:  now,
+		})
+	}
+
+	// 执行批量插入
+	_, err := dao.TOrderFromAddress.Ctx(ctx).
+		Data(batch).
+		Batch(100). // 每批次插入100条记录
+		Insert()
+
 	if err != nil {
-		return fmt.Errorf("插入数据库失败: %v", err)
+		return fmt.Errorf("批量插入数据库失败: %v", err)
 	}
 
 	return nil

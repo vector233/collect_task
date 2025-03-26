@@ -15,6 +15,7 @@ database:
     link: "mysql:root:1qaz@WSX3edc@tcp(124.221.133.54:3307)/tron"
 
 tron:
+  address: "TDqSquXBgUCLYvYC4XZgrprLK589dkhSCf"
    # pipei 模式配置
   pipei:
     runMinutes: 10  # 程序运行10分钟后重启

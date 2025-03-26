@@ -16,6 +16,7 @@ database:
 
 # 添加到现有配置文件中
 tron:
+  address: "TDqSquXBgUCLYvYC4XZgrprLK589dkhSCf"
    # pipei 模式配置
   pipei:
     runMinutes: 10  # 程序运行10分钟后重启
