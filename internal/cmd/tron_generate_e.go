@@ -4,13 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/gogf/gf/v2/os/gcmd"
+	"github.com/gogf/gf/v2/os/gtime"
+
+	"github.com/bivdex/tron-lion/internal/dao"
+	"github.com/bivdex/tron-lion/internal/model/entity"
 )
 
 var (
@@ -31,10 +35,70 @@ func runTronGenerateE(ctx context.Context, parser *gcmd.Parser) (err error) {
 	}
 
 	fmt.Printf("找到 %d 个相关地址\n", len(addresses))
-	for i, addr := range addresses {
-		if i < 10 { // 只打印前10个作为示例
-			fmt.Println(addr)
+
+	// 统计插入和已存在的地址数量
+	var insertCount, existCount int
+
+	// 遍历所有地址并插入数据库
+	for _, addr := range addresses {
+		// 检查地址是否已存在
+		exists, err := checkAddressExists(ctx, addr)
+		if err != nil {
+			fmt.Printf("检查地址 %s 是否存在时出错: %v\n", addr, err)
+			continue
 		}
+
+		if exists {
+			existCount++
+			if existCount <= 10 { // 只打印前10个已存在的地址
+				fmt.Printf("地址已存在: %s\n", addr)
+			}
+			continue
+		}
+
+		// 插入新地址
+		if err := insertAddress(ctx, addr); err != nil {
+			fmt.Printf("插入地址 %s 时出错: %v\n", addr, err)
+			continue
+		}
+
+		insertCount++
+		if insertCount <= 10 { // 只打印前10个新插入的地址
+			fmt.Printf("成功插入地址: %s\n", addr)
+		}
+	}
+
+	fmt.Printf("处理完成: 共找到 %d 个地址, 新插入 %d 个, 已存在 %d 个\n",
+		len(addresses), insertCount, existCount)
+
+	return nil
+}
+
+// 检查地址是否已存在于数据库
+func checkAddressExists(ctx context.Context, address string) (bool, error) {
+	count, err := dao.TOrderFromAddress.Ctx(ctx).
+		Where(dao.TOrderFromAddress.Columns().FromAddress, address).
+		Count()
+
+	if err != nil {
+		return false, fmt.Errorf("查询数据库失败: %v", err)
+	}
+
+	return count > 0, nil
+}
+
+// 将地址插入到数据库
+func insertAddress(ctx context.Context, address string) error {
+	// 创建新记录
+	data := &entity.TOrderFromAddress{
+		FromAddress: address,
+		CreateTime:  gtime.Now(),
+	}
+
+	// 插入数据库
+	_, err := dao.TOrderFromAddress.Ctx(ctx).Insert(data)
+	if err != nil {
+		return fmt.Errorf("插入数据库失败: %v", err)
 	}
 
 	return nil
@@ -86,7 +150,7 @@ func fetchAddresses(ctx context.Context, address string) ([]string, error) {
 		}
 
 		// 读取响应内容
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return nil, fmt.Errorf("读取响应失败: %v", err)
 		}
