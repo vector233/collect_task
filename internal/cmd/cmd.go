@@ -31,7 +31,7 @@ func init() {
 		&TronLianghao,
 		&TronTest,
 		&TronGenerateA,
-		&TronGenerateC,
+		&TronGenerateE,
 	)
 	if err != nil {
 		panic(err)
