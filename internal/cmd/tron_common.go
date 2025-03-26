@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,6 +14,10 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/btcsuite/btcd/btcec/v2"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/shengdoushi/base58"
 
 	"github.com/bivdex/tron-lion/internal/dao"
 	"github.com/bivdex/tron-lion/internal/model/entity"
@@ -284,6 +290,8 @@ func watchOutputFile(ctx context.Context, outputFile string, resultChan chan<- M
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
+	failedFile := "failed_private_address.log"
+	mismatchedFile := "mismatched_private_address.log"
 	for {
 		select {
 		case <-ctx.Done():
@@ -335,6 +343,20 @@ func watchOutputFile(ctx context.Context, outputFile string, resultChan chan<- M
 				if len(parts) >= 2 {
 					// 获取地址部分作为匹配模式
 					addressPart := parts[0]
+					privateAddress := parts[1]
+					address, err := getAddressFromPrivateKey(privateAddress)
+					if err != nil {
+						// 写入失败的私钥到文件
+						gfile.PutContentsAppend(failedFile, line+"\n")
+						fmt.Printf("解析私钥失败，地址：%v， err: %v\n", line, err)
+						continue
+					}
+					if address != addressPart {
+						// 写入失败的私钥到文件
+						gfile.PutContentsAppend(mismatchedFile, line+"\n")
+						fmt.Printf("地址不匹配，地址：%v， err: %v\n", line, err)
+						continue
+					}
 
 					// 创建匹配结果结构体
 					matchResult := MatchResult{
@@ -405,4 +427,65 @@ func getLimitedPatterns(ctx context.Context) ([]*entity.TOrderAddressRecordResul
 
 	fmt.Printf("已获取 %d/%d 条待执行任务\n", len(patterns), limit)
 	return patterns, nil
+}
+
+// 从私钥获取波场地址
+func getAddressFromPrivateKey(privateKeyHex string) (string, error) {
+	// 1. 解码私钥
+	privateKeyBytes, err := hex.DecodeString(privateKeyHex)
+	if err != nil {
+		return "", fmt.Errorf("解码私钥失败: %v", err)
+	}
+
+	// 2. 从私钥生成公钥
+	privateKey, _ := btcec.PrivKeyFromBytes(privateKeyBytes)
+	publicKey := privateKey.PubKey()
+	publicKeyBytes := publicKey.SerializeUncompressed()
+
+	// 3. 只保留X和Y坐标，去掉前缀0x04
+	publicKeyBytes = publicKeyBytes[1:]
+
+	// 4. 对公钥进行Keccak-256哈希
+	publicKeyHash := crypto.Keccak256(publicKeyBytes)
+
+	// 5. 只保留哈希的最后20字节作为地址
+	address := publicKeyHash[len(publicKeyHash)-20:]
+
+	// 6. 添加前缀0x41（波场地址前缀）
+	addressWithPrefix := append([]byte{0x41}, address...)
+
+	// 7. 计算校验和（两次SHA-256哈希的前4字节）
+	firstSHA := sha256.Sum256(addressWithPrefix)
+	secondSHA := sha256.Sum256(firstSHA[:])
+	checksum := secondSHA[:4]
+
+	// 8. 将地址和校验和拼接
+	addressWithChecksum := append(addressWithPrefix, checksum...)
+
+	// 9. Base58编码得到最终地址
+	tronAddress := base58.Encode(addressWithChecksum, base58.BitcoinAlphabet)
+
+	return tronAddress, nil
+}
+
+// 将十六进制格式的波场地址转换为Base58格式
+func hexAddressToBase58(hexAddress string) (string, error) {
+	// 1. 解码十六进制地址
+	addressBytes, err := hex.DecodeString(hexAddress)
+	if err != nil {
+		return "", fmt.Errorf("解码地址失败: %v", err)
+	}
+
+	// 2. 计算校验和（两次SHA-256哈希的前4字节）
+	firstSHA := sha256.Sum256(addressBytes)
+	secondSHA := sha256.Sum256(firstSHA[:])
+	checksum := secondSHA[:4]
+
+	// 3. 将地址和校验和拼接
+	addressWithChecksum := append(addressBytes, checksum...)
+
+	// 4. Base58编码得到最终地址
+	base58Address := base58.Encode(addressWithChecksum, base58.BitcoinAlphabet)
+
+	return base58Address, nil
 }
