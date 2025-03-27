@@ -27,7 +27,7 @@ var (
 
 func runTronGenerateA(ctx context.Context, parser *gcmd.Parser) (err error) {
 	// 获取参数
-	count := g.Cfg().MustGet(ctx, "count").Int()
+	count := g.Cfg().MustGet(ctx, "count", 10000).Int()
 
 	// 如果没有提供参数，使用默认值
 	if count <= 0 {

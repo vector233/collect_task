@@ -9,6 +9,29 @@ go mod download
 ```
 4. 之后根据需要执行以下不同命令，编译不同的可执行exe文件
 
+### 生成不同表数据
+```bash
+go build -o main.exe main.go
+```
+生成 A 表, C 表，D 表，E 表
+```bash
+./main gen_a
+./main gen_c
+./main gen_d
+./main gen_e
+```
+config.yaml 配置中增加以下参数
+```yaml
+tron:
+  address: "TDqSquXBgUCLYvYC4XZgrprLK589dkhSCf"  # 初始地址
+  maxConcurrency: 20                             # 最大并发数
+  maxDepth: 100                                  # 最大递归深度
+  maxAddressesPerLevel: 1000                     # 每层最多处理的地址数量
+  maxPagesPerAddress: 10                         # 每个地址最多查询的页数
+  prefix: 3                                      # 前3
+  suffix: 4                                      # 后4
+```
+
 ### 1. 前3后4地址匹配程序
 
 ```bash

@@ -30,7 +30,7 @@ func runTronGenerateD(ctx context.Context, parser *gcmd.Parser) (err error) {
 	fmt.Printf("[开始] 处理初始地址: %s\n", address)
 
 	// 递归深度限制，避免无限递归
-	maxDepth := g.Cfg().MustGet(ctx, "tron.maxDepth", 3).Int()
+	maxDepth := g.Cfg().MustGet(ctx, "tron.maxDepth", 100).Int()
 
 	// 记录总共处理的地址数量
 	var totalProcessed, totalInserted int
@@ -107,7 +107,7 @@ func processAddressRecursivelyD(
 	// 如果未达到最大深度，继续递归处理新地址
 	if currentDepth < maxDepth-1 && len(newAddresses) > 0 {
 		// 限制每层递归处理的地址数量，避免爆炸式增长
-		maxAddressesPerLevel := g.Cfg().MustGet(ctx, "tron.maxAddressesPerLevel", 10).Int()
+		maxAddressesPerLevel := g.Cfg().MustGet(ctx, "tron.maxAddressesPerLevel", 1000).Int()
 		fmt.Printf("限制每层递归处理的地址数量为 %d 个\n", maxAddressesPerLevel)
 		processCount := len(newAddresses)
 		if processCount > maxAddressesPerLevel {
