@@ -12,15 +12,15 @@ import (
 )
 
 var (
-	TronGenerateE = gcmd.Command{
-		Name:  "gen_e",
-		Usage: "tron gen_e",
-		Brief: "生成数据并插入到TOrderFromAddress表",
-		Func:  runTronGenerateE,
+	TronGenerateD = gcmd.Command{
+		Name:  "gen_d",
+		Usage: "tron gen_d",
+		Brief: "生成数据并插入到TOrderToAddressRecord表",
+		Func:  runTronGenerateD,
 	}
 )
 
-func runTronGenerateE(ctx context.Context, parser *gcmd.Parser) (err error) {
+func runTronGenerateD(ctx context.Context, parser *gcmd.Parser) (err error) {
 	// 从配置读取初始地址
 	address := g.Cfg().MustGet(ctx, "tron.address").String()
 	if address == "" {
@@ -39,7 +39,7 @@ func runTronGenerateE(ctx context.Context, parser *gcmd.Parser) (err error) {
 	processedAddresses := make(map[string]struct{})
 
 	// 开始递归处理
-	err = processAddressRecursively(ctx, address, 0, maxDepth, processedAddresses, &totalProcessed, &totalInserted)
+	err = processAddressRecursivelyD(ctx, address, 0, maxDepth, processedAddresses, &totalProcessed, &totalInserted)
 	if err != nil {
 		return err
 	}
@@ -49,7 +49,7 @@ func runTronGenerateE(ctx context.Context, parser *gcmd.Parser) (err error) {
 }
 
 // 递归处理地址及其交易记录中的地址
-func processAddressRecursively(
+func processAddressRecursivelyD(
 	ctx context.Context,
 	address string,
 	currentDepth,
@@ -78,7 +78,7 @@ func processAddressRecursively(
 		currentDepth+1, maxDepth, address, len(addresses))
 
 	// 批量查询数据库中已存在的地址
-	existingAddresses, err := batchCheckAddresses(ctx, addresses)
+	existingAddresses, err := batchCheckAddressesD(ctx, addresses)
 	if err != nil {
 		return fmt.Errorf("批量查询地址失败: %v", err)
 	}
@@ -97,7 +97,7 @@ func processAddressRecursively(
 	// 如果有新地址需要插入
 	if len(newAddresses) > 0 {
 		// 批量插入新地址
-		if err := batchInsertAddresses(ctx, newAddresses); err != nil {
+		if err := batchInsertAddressesD(ctx, newAddresses); err != nil {
 			return fmt.Errorf("批量插入地址失败: %v", err)
 		}
 
@@ -119,7 +119,7 @@ func processAddressRecursively(
 		for i := 0; i < processCount; i++ {
 			fmt.Printf("深度 %d/%d:  总共 %d 个，当前处理第 %d 个\n",
 				currentDepth+2, maxDepth, processCount, i)
-			err := processAddressRecursively(
+			err := processAddressRecursivelyD(
 				ctx,
 				newAddresses[i],
 				currentDepth+1,
@@ -140,15 +140,15 @@ func processAddressRecursively(
 }
 
 // 批量检查地址是否存在于数据库
-func batchCheckAddresses(ctx context.Context, addresses []string) (map[string]struct{}, error) {
+func batchCheckAddressesD(ctx context.Context, addresses []string) (map[string]struct{}, error) {
 	if len(addresses) == 0 {
 		return make(map[string]struct{}), nil
 	}
 
 	// 查询数据库中已存在的地址
-	records, err := dao.TOrderFromAddress.Ctx(ctx).
-		Where(dao.TOrderFromAddress.Columns().FromAddress, addresses).
-		Fields(dao.TOrderFromAddress.Columns().FromAddress).
+	records, err := dao.TOrderToAddressRecord.Ctx(ctx).
+		Where(dao.TOrderToAddressRecord.Columns().ToAddress, addresses).
+		Fields(dao.TOrderToAddressRecord.Columns().ToAddress).
 		All()
 
 	if err != nil {
@@ -166,7 +166,7 @@ func batchCheckAddresses(ctx context.Context, addresses []string) (map[string]st
 }
 
 // 批量插入地址到数据库
-func batchInsertAddresses(ctx context.Context, addresses []string) error {
+func batchInsertAddressesD(ctx context.Context, addresses []string) error {
 	if len(addresses) == 0 {
 		return nil
 	}
@@ -177,13 +177,14 @@ func batchInsertAddresses(ctx context.Context, addresses []string) error {
 
 	for _, addr := range addresses {
 		batch = append(batch, map[string]interface{}{
-			dao.TOrderFromAddress.Columns().FromAddress: addr,
-			dao.TOrderFromAddress.Columns().CreateTime:  now,
+			dao.TOrderToAddressRecord.Columns().FromAddressPart: genFromAddressPart(ctx),
+			dao.TOrderToAddressRecord.Columns().ToAddress:       addr,
+			dao.TOrderToAddressRecord.Columns().CreateTime:      now,
 		})
 	}
 
 	// 执行批量插入
-	_, err := dao.TOrderFromAddress.Ctx(ctx).
+	_, err := dao.TOrderToAddressRecord.Ctx(ctx).
 		Data(batch).
 		Batch(200).
 		Insert()
@@ -193,4 +194,22 @@ func batchInsertAddresses(ctx context.Context, addresses []string) error {
 	}
 
 	return nil
+}
+
+func genFromAddressPart(ctx context.Context) string {
+	prefix := g.Cfg().MustGet(ctx, "tron.prefix").Int()
+	suffix := g.Cfg().MustGet(ctx, "tron.suffix").Int()
+	if prefix <= 0 {
+		prefix = 3 // 默认前缀长度为3
+	}
+	if suffix <= 0 {
+		suffix = 4 // 默认后缀长度为4
+	}
+	// 生成前缀，确保首字母是T
+	prefixStr := "T" + generateRandomString(prefix-1)
+	// 生成后缀
+	suffixStr := generateRandomString(suffix)
+	// 组合成匹配规则
+	pattern := prefixStr + "*" + suffixStr
+	return pattern
 }

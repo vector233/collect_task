@@ -3,6 +3,9 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"math/rand"
+	"strconv"
+	"time"
 
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/os/gcmd"
@@ -12,15 +15,15 @@ import (
 )
 
 var (
-	TronGenerateE = gcmd.Command{
-		Name:  "gen_e",
-		Usage: "tron gen_e",
-		Brief: "生成数据并插入到TOrderFromAddress表",
-		Func:  runTronGenerateE,
+	TronGenerateC = gcmd.Command{
+		Name:  "gen_c",
+		Usage: "tron gen_c",
+		Brief: "生成数据并插入到TReceiveOrder表",
+		Func:  runTronGenerateC,
 	}
 )
 
-func runTronGenerateE(ctx context.Context, parser *gcmd.Parser) (err error) {
+func runTronGenerateC(ctx context.Context, parser *gcmd.Parser) (err error) {
 	// 从配置读取初始地址
 	address := g.Cfg().MustGet(ctx, "tron.address").String()
 	if address == "" {
@@ -39,7 +42,7 @@ func runTronGenerateE(ctx context.Context, parser *gcmd.Parser) (err error) {
 	processedAddresses := make(map[string]struct{})
 
 	// 开始递归处理
-	err = processAddressRecursively(ctx, address, 0, maxDepth, processedAddresses, &totalProcessed, &totalInserted)
+	err = processAddressRecursivelyC(ctx, address, 0, maxDepth, processedAddresses, &totalProcessed, &totalInserted)
 	if err != nil {
 		return err
 	}
@@ -49,7 +52,7 @@ func runTronGenerateE(ctx context.Context, parser *gcmd.Parser) (err error) {
 }
 
 // 递归处理地址及其交易记录中的地址
-func processAddressRecursively(
+func processAddressRecursivelyC(
 	ctx context.Context,
 	address string,
 	currentDepth,
@@ -78,7 +81,7 @@ func processAddressRecursively(
 		currentDepth+1, maxDepth, address, len(addresses))
 
 	// 批量查询数据库中已存在的地址
-	existingAddresses, err := batchCheckAddresses(ctx, addresses)
+	existingAddresses, err := batchCheckAddressesC(ctx, addresses)
 	if err != nil {
 		return fmt.Errorf("批量查询地址失败: %v", err)
 	}
@@ -97,7 +100,7 @@ func processAddressRecursively(
 	// 如果有新地址需要插入
 	if len(newAddresses) > 0 {
 		// 批量插入新地址
-		if err := batchInsertAddresses(ctx, newAddresses); err != nil {
+		if err := batchInsertAddressesC(ctx, newAddresses); err != nil {
 			return fmt.Errorf("批量插入地址失败: %v", err)
 		}
 
@@ -119,7 +122,7 @@ func processAddressRecursively(
 		for i := 0; i < processCount; i++ {
 			fmt.Printf("深度 %d/%d:  总共 %d 个，当前处理第 %d 个\n",
 				currentDepth+2, maxDepth, processCount, i)
-			err := processAddressRecursively(
+			err := processAddressRecursivelyC(
 				ctx,
 				newAddresses[i],
 				currentDepth+1,
@@ -140,15 +143,15 @@ func processAddressRecursively(
 }
 
 // 批量检查地址是否存在于数据库
-func batchCheckAddresses(ctx context.Context, addresses []string) (map[string]struct{}, error) {
+func batchCheckAddressesC(ctx context.Context, addresses []string) (map[string]struct{}, error) {
 	if len(addresses) == 0 {
 		return make(map[string]struct{}), nil
 	}
 
 	// 查询数据库中已存在的地址
-	records, err := dao.TOrderFromAddress.Ctx(ctx).
-		Where(dao.TOrderFromAddress.Columns().FromAddress, addresses).
-		Fields(dao.TOrderFromAddress.Columns().FromAddress).
+	records, err := dao.TReceiveOrder.Ctx(ctx).
+		Where(dao.TReceiveOrder.Columns().ToAddress, addresses).
+		Fields(dao.TReceiveOrder.Columns().ToAddress).
 		All()
 
 	if err != nil {
@@ -166,7 +169,7 @@ func batchCheckAddresses(ctx context.Context, addresses []string) (map[string]st
 }
 
 // 批量插入地址到数据库
-func batchInsertAddresses(ctx context.Context, addresses []string) error {
+func batchInsertAddressesC(ctx context.Context, addresses []string) error {
 	if len(addresses) == 0 {
 		return nil
 	}
@@ -177,13 +180,17 @@ func batchInsertAddresses(ctx context.Context, addresses []string) error {
 
 	for _, addr := range addresses {
 		batch = append(batch, map[string]interface{}{
-			dao.TOrderFromAddress.Columns().FromAddress: addr,
-			dao.TOrderFromAddress.Columns().CreateTime:  now,
+			dao.TReceiveOrder.Columns().OrderNo:         "ORD" + strconv.FormatInt(time.Now().UnixNano(), 10) + generateRandomString(4),
+			dao.TReceiveOrder.Columns().FromAddressPart: genFromAddressPart(ctx),
+			dao.TReceiveOrder.Columns().ToAddress:       addr,
+			dao.TReceiveOrder.Columns().Amount:          rand.Float64()*0.008 + 0.001,
+			dao.TReceiveOrder.Columns().OrderTime:       now,
+			dao.TReceiveOrder.Columns().CreateTime:      now,
 		})
 	}
 
 	// 执行批量插入
-	_, err := dao.TOrderFromAddress.Ctx(ctx).
+	_, err := dao.TReceiveOrder.Ctx(ctx).
 		Data(batch).
 		Batch(200).
 		Insert()

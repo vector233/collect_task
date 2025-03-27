@@ -16,9 +16,11 @@ database:
 
 tron:
   address: "TDqSquXBgUCLYvYC4XZgrprLK589dkhSCf"  # 初始地址
-  maxDepth: 4                                    # 最大递归深度
+  maxDepth: 3                                    # 最大递归深度
   maxAddressesPerLevel: 20                       # 每层最多处理的地址数量
   maxPagesPerAddress: 10                         # 每个地址最多查询的页数
+  prefix: 3                                      # 前3
+  suffix: 4                                      # 后4
    # pipei 模式配置
   pipei:
     runMinutes: 10  # 程序运行10分钟后重启
