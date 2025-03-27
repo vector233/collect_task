@@ -118,8 +118,6 @@ func processAddressesWithConcurrency(
 			fmt.Printf("深度 %d/%d: 地址 %s 找到 %d 个相关地址\n",
 				currentDepth+1, maxDepth, address, len(addresses))
 
-			// 直接使用 INSERT ON DUPLICATE KEY UPDATE 操作
-			// 对于已存在的地址会忽略，不存在的会插入
 			result, err := insertOrIgnoreAddresses(ctx, addresses)
 			if err != nil {
 				fmt.Printf("插入地址失败: %v\n", err)
@@ -141,9 +139,6 @@ func processAddressesWithConcurrency(
 				currentDepth+1, maxDepth, address, insertedCount)
 
 			// 将所有地址添加到下一层处理队列
-			// 注意：这里我们不再区分新旧地址，而是将所有地址都加入队列
-			// 因为我们已经不再单独查询哪些是新地址了
-			// 但是由于我们在处理前会检查地址是否已处理过，所以不会重复处理
 			if currentDepth < maxDepth-1 {
 				nextLevelMu.Lock()
 				nextLevelAddresses = append(nextLevelAddresses, addresses...)
@@ -238,7 +233,6 @@ func batchInsertAddresses(ctx context.Context, addresses []string) error {
 	return nil
 }
 
-// 使用 INSERT ON DUPLICATE KEY UPDATE 插入地址
 // 对于已存在的地址会忽略，不存在的会插入
 func insertOrIgnoreAddresses(ctx context.Context, addresses []string) (sql.Result, error) {
 	if len(addresses) == 0 {
@@ -256,9 +250,6 @@ func insertOrIgnoreAddresses(ctx context.Context, addresses []string) (sql.Resul
 		})
 	}
 
-	// 执行带有 ON DUPLICATE KEY UPDATE 的插入
-	// 这里我们使用 create_time=create_time 表示不更新任何字段
-	// 这样对于已存在的记录不会有任何变化
 	return dao.TOrderFromAddress.Ctx(ctx).
 		Data(batch).
 		Batch(500).

@@ -16,7 +16,7 @@ database:
 
 tron:
   address: "TDqSquXBgUCLYvYC4XZgrprLK589dkhSCf"  # 初始地址
-  maxConcurrency: 20                             # 最大并发数
+  maxConcurrency: 10                             # 最大并发数
   maxDepth: 100                                  # 最大递归深度
   maxAddressesPerLevel: 1000                      # 每层最多处理的地址数量
   maxPagesPerAddress: 10                         # 每个地址最多查询的页数
