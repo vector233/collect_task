@@ -27,20 +27,61 @@ var (
 )
 
 func runTronGenerateE(ctx context.Context, parser *gcmd.Parser) (err error) {
-	// 从配置中读取地址
+	// 从配置读取初始地址
 	address := g.Cfg().MustGet(ctx, "tron.address").String()
 	if address == "" {
-		return fmt.Errorf("未配置波场地址，请在配置文件中设置 tron.address")
+		return fmt.Errorf("未配置波场地址")
 	}
 
-	fmt.Printf("正在处理波场地址: %s\n", address)
+	fmt.Printf("[开始] 处理初始地址: %s\n", address)
 
-	addresses, err := fetchAddresses(ctx, address)
+	// 递归深度限制，避免无限递归
+	maxDepth := g.Cfg().MustGet(ctx, "tron.maxDepth", 3).Int()
+
+	// 记录总共处理的地址数量
+	var totalProcessed, totalInserted int
+
+	// 记录已处理地址，防止重复处理
+	processedAddresses := make(map[string]struct{})
+
+	// 开始递归处理
+	err = processAddressRecursively(ctx, address, 0, maxDepth, processedAddresses, &totalProcessed, &totalInserted)
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("找到 %d 个相关地址\n", len(addresses))
+	fmt.Printf("[完成] 总计处理 %d 个地址, 新增 %d 个地址\n", totalProcessed, totalInserted)
+	return nil
+}
+
+// 递归处理地址及其交易记录中的地址
+func processAddressRecursively(
+	ctx context.Context,
+	address string,
+	currentDepth,
+	maxDepth int,
+	processedAddresses map[string]struct{},
+	totalProcessed,
+	totalInserted *int,
+) error {
+	// 检查是否已处理过该地址
+	if _, exists := processedAddresses[address]; exists {
+		return nil
+	}
+
+	// 标记该地址为已处理
+	processedAddresses[address] = struct{}{}
+
+	// 获取该地址的交易记录中的所有地址
+	fmt.Printf("深度 %d/%d: 正在处理地址: %s\n", currentDepth+1, maxDepth, address)
+	addresses, err := fetchAddresses(ctx, address)
+	if err != nil {
+		return fmt.Errorf("获取地址 %s 的交易记录失败: %v", address, err)
+	}
+
+	*totalProcessed += len(addresses)
+	fmt.Printf("深度 %d/%d: 地址 %s 找到 %d 个相关地址\n",
+		currentDepth+1, maxDepth, address, len(addresses))
 
 	// 批量查询数据库中已存在的地址
 	existingAddresses, err := batchCheckAddresses(ctx, addresses)
@@ -56,22 +97,8 @@ func runTronGenerateE(ctx context.Context, parser *gcmd.Parser) (err error) {
 		}
 	}
 
-	fmt.Printf("已存在 %d 个地址, 需要插入 %d 个新地址\n",
-		len(existingAddresses), len(newAddresses))
-
-	// 打印部分已存在的地址作为示例
-	if len(existingAddresses) > 0 {
-		fmt.Println("部分已存在的地址示例:")
-		i := 0
-		for addr := range existingAddresses {
-			if i < 10 { // 只打印前10个
-				fmt.Printf("  %s\n", addr)
-				i++
-			} else {
-				break
-			}
-		}
-	}
+	fmt.Printf("深度 %d/%d: 已存在 %d 个地址, 需要插入 %d 个新地址\n",
+		currentDepth+1, maxDepth, len(existingAddresses), len(newAddresses))
 
 	// 如果有新地址需要插入
 	if len(newAddresses) > 0 {
@@ -80,19 +107,52 @@ func runTronGenerateE(ctx context.Context, parser *gcmd.Parser) (err error) {
 			return fmt.Errorf("批量插入地址失败: %v", err)
 		}
 
+		*totalInserted += len(newAddresses)
+
 		// 打印部分新插入的地址作为示例
-		fmt.Println("部分新插入的地址示例:")
-		for i, addr := range newAddresses {
-			if i < 10 { // 只打印前10个
-				fmt.Printf("  %s\n", addr)
-			} else {
-				break
+		if len(newAddresses) > 0 {
+			fmt.Printf("深度 %d/%d: 部分新插入的地址示例:\n", currentDepth+1, maxDepth)
+			for i, addr := range newAddresses {
+				if i < 5 { // 只打印前5个
+					fmt.Printf("  %s\n", addr)
+				} else {
+					break
+				}
 			}
 		}
 	}
 
-	fmt.Printf("处理完成: 共找到 %d 个地址, 新插入 %d 个, 已存在 %d 个\n",
-		len(addresses), len(newAddresses), len(existingAddresses))
+	// 如果未达到最大深度，继续递归处理新地址
+	if currentDepth < maxDepth-1 && len(newAddresses) > 0 {
+		// 限制每层递归处理的地址数量，避免爆炸式增长
+		maxAddressesPerLevel := g.Cfg().MustGet(ctx, "tron.maxAddressesPerLevel", 10).Int()
+		fmt.Printf("限制每层递归处理的地址数量为 %d 个\n", maxAddressesPerLevel)
+		processCount := len(newAddresses)
+		if processCount > maxAddressesPerLevel {
+			processCount = maxAddressesPerLevel
+			fmt.Printf("深度 %d/%d: 限制处理地址数量为 %d 个\n",
+				currentDepth+2, maxDepth, processCount)
+		}
+
+		for i := 0; i < processCount; i++ {
+			fmt.Printf("深度 %d/%d:  总共 %d 个，当前处理第 %d 个\n",
+				currentDepth+2, maxDepth, processCount, i)
+			err := processAddressRecursively(
+				ctx,
+				newAddresses[i],
+				currentDepth+1,
+				maxDepth,
+				processedAddresses,
+				totalProcessed,
+				totalInserted,
+			)
+			if err != nil {
+				fmt.Printf("处理地址 %s 时出错: %v\n", newAddresses[i], err)
+				// 继续处理其他地址，不中断整个流程
+				continue
+			}
+		}
+	}
 
 	return nil
 }
@@ -143,7 +203,7 @@ func batchInsertAddresses(ctx context.Context, addresses []string) error {
 	// 执行批量插入
 	_, err := dao.TOrderFromAddress.Ctx(ctx).
 		Data(batch).
-		Batch(100). // 每批次插入100条记录
+		Batch(200).
 		Insert()
 
 	if err != nil {
@@ -153,35 +213,40 @@ func batchInsertAddresses(ctx context.Context, addresses []string) error {
 	return nil
 }
 
-// 根据某个 波场地址查询该地址所有的交易记录下的地址
-// https://developers.tron.network/reference/get-transaction-info-by-account-address
+// 根据波场地址查询相关交易地址
+// API文档: https://developers.tron.network/reference/get-transaction-info-by-account-address
 func fetchAddresses(ctx context.Context, address string) ([]string, error) {
 	baseURL := "https://api.shasta.trongrid.io/v1/accounts/%s/transactions"
 	apiURL := fmt.Sprintf(baseURL, address)
 
-	// 设置查询参数
+	// 查询参数设置
 	params := url.Values{}
-	params.Add("limit", "200") // 使用最大限制
-	// params.Add("only_confirmed", "true") // 只获取已确认的交易
+	params.Add("limit", "200") // 单页最大记录数
+	// params.Add("only_confirmed", "true")
 
-	// 用于存储所有找到的地址
+	// 存储发现的地址
 	addressMap := make(map[string]struct{})
-
-	// 添加查询地址本身
-	addressMap[address] = struct{}{}
+	addressMap[address] = struct{}{} // 包含查询地址本身
 
 	fingerprint := ""
 	hasMore := true
 
-	// 使用分页获取所有交易
-	for hasMore {
-		// 构建完整URL
+	// 分页查询限制，防止单地址消耗过多资源
+	maxPages := g.Cfg().MustGet(ctx, "tron.maxPagesPerAddress", 10).Int()
+	currentPage := 0
+
+	// 分页获取交易记录
+	for hasMore && (maxPages <= 0 || currentPage < maxPages) {
+		currentPage++
+		fmt.Printf("正在查询地址 %s 的第 %d/%d 页交易记录\n", address, currentPage, maxPages)
+
+		// 构建请求URL
 		fullURL := apiURL
 		if len(params) > 0 {
 			fullURL = fmt.Sprintf("%s?%s", apiURL, params.Encode())
 		}
 
-		// 发送HTTP请求
+		// 发送请求
 		req, err := http.NewRequestWithContext(ctx, "GET", fullURL, nil)
 		if err != nil {
 			return nil, fmt.Errorf("创建请求失败: %v", err)
@@ -190,41 +255,43 @@ func fetchAddresses(ctx context.Context, address string) ([]string, error) {
 		client := &http.Client{Timeout: 10 * time.Second}
 		resp, err := client.Do(req)
 		if err != nil {
-			return nil, fmt.Errorf("发送请求失败: %v", err)
+			return nil, fmt.Errorf("请求失败: %v", err)
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("API返回错误状态码: %d", resp.StatusCode)
+			return nil, fmt.Errorf("API返回错误: %d", resp.StatusCode)
 		}
 
-		// 读取响应内容
+		// 解析响应
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return nil, fmt.Errorf("读取响应失败: %v", err)
 		}
 
-		// 解析JSON响应
 		var response TronTransactionResponse
 		if err := json.Unmarshal(body, &response); err != nil {
 			return nil, fmt.Errorf("解析JSON失败: %v", err)
 		}
+		fmt.Printf("获取到 %d 条交易记录\n", len(response.Data))
 
 		// 提取交易中的地址
 		for _, tx := range response.Data {
-			// 添加from地址
-			if tx.RawData.Contract[0].Parameter.Value.OwnerAddress != "" {
-				hexAddress := tx.RawData.Contract[0].Parameter.Value.OwnerAddress
-				addressMap[hexAddress] = struct{}{}
+			// 合约可能为空，需检查
+			if len(tx.RawData.Contract) > 0 {
+				// 发送方地址
+				if tx.RawData.Contract[0].Parameter.Value.OwnerAddress != "" {
+					hexAddress := tx.RawData.Contract[0].Parameter.Value.OwnerAddress
+					addressMap[hexAddress] = struct{}{}
+				}
+
+				// 接收方地址
+				if tx.RawData.Contract[0].Parameter.Value.ToAddress != "" {
+					hexAddress := tx.RawData.Contract[0].Parameter.Value.ToAddress
+					addressMap[hexAddress] = struct{}{}
+				}
 			}
 
-			// 添加to地址
-			if tx.RawData.Contract[0].Parameter.Value.ToAddress != "" {
-				hexAddress := tx.RawData.Contract[0].Parameter.Value.ToAddress
-				addressMap[hexAddress] = struct{}{}
-			}
-
-			// 处理内部交易的地址
 			for _, internalTx := range tx.InternalTransactions {
 				if internalTx.FromAddress != "" {
 					addressMap[internalTx.FromAddress] = struct{}{}
@@ -243,8 +310,13 @@ func fetchAddresses(ctx context.Context, address string) ([]string, error) {
 			hasMore = false
 		}
 
-		// 避免API限流
+		// 防止API限流，加点延迟
 		time.Sleep(200 * time.Millisecond)
+	}
+
+	// 达到页数限制提示
+	if hasMore && maxPages > 0 && currentPage >= maxPages {
+		fmt.Printf("地址 %s 的交易记录超过最大查询页数 %d，停止查询\n", address, maxPages)
 	}
 
 	// 将map转换为slice

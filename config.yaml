@@ -15,7 +15,10 @@ database:
     link: "mysql:root:1qaz@WSX3edc@tcp(124.221.133.54:3307)/tron"
 
 tron:
-  address: "TDqSquXBgUCLYvYC4XZgrprLK589dkhSCf"
+  address: "TDqSquXBgUCLYvYC4XZgrprLK589dkhSCf"  # 初始地址
+  maxDepth: 4                                    # 最大递归深度
+  maxAddressesPerLevel: 20                       # 每层最多处理的地址数量
+  maxPagesPerAddress: 10                         # 每个地址最多查询的页数
    # pipei 模式配置
   pipei:
     runMinutes: 10  # 程序运行10分钟后重启

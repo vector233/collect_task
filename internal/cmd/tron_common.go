@@ -290,7 +290,9 @@ func watchOutputFile(ctx context.Context, outputFile string, resultChan chan<- M
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
+	// 私钥解析地址失败日志
 	failedFile := "failed_private_address.log"
+	// 私钥解析地址和原地址不匹配日志
 	mismatchedFile := "mismatched_private_address.log"
 	for {
 		select {
