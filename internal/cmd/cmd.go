@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"github.com/gogf/gf/v2/os/gcmd"
+
+	"github.com/bivdex/tron-lion/internal/cmd/generate_data"
 )
 
 var (
@@ -30,10 +32,10 @@ func init() {
 		&TronPipei,
 		&TronLianghao,
 		&TronTest,
-		&TronGenerateA,
-		&TronGenerateE,
-		&TronGenerateD,
-		&TronGenerateC,
+		&generate_data.TronGenerateA,
+		&generate_data.TronGenerateE,
+		&generate_data.TronGenerateD,
+		&generate_data.TronGenerateC,
 	)
 	if err != nil {
 		panic(err)

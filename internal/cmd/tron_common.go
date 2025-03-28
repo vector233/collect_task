@@ -469,25 +469,3 @@ func getAddressFromPrivateKey(privateKeyHex string) (string, error) {
 
 	return tronAddress, nil
 }
-
-// 将十六进制格式的波场地址转换为Base58格式
-func hexAddressToBase58(hexAddress string) (string, error) {
-	// 1. 解码十六进制地址
-	addressBytes, err := hex.DecodeString(hexAddress)
-	if err != nil {
-		return "", fmt.Errorf("解码地址失败: %v", err)
-	}
-
-	// 2. 计算校验和（两次SHA-256哈希的前4字节）
-	firstSHA := sha256.Sum256(addressBytes)
-	secondSHA := sha256.Sum256(firstSHA[:])
-	checksum := secondSHA[:4]
-
-	// 3. 将地址和校验和拼接
-	addressWithChecksum := append(addressBytes, checksum...)
-
-	// 4. Base58编码得到最终地址
-	base58Address := base58.Encode(addressWithChecksum, base58.BitcoinAlphabet)
-
-	return base58Address, nil
-}

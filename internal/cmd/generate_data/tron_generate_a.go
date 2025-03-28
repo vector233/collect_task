@@ -1,17 +1,14 @@
-package cmd
+package generate_data
 
 import (
 	"context"
 	"fmt"
 	"math/rand"
-	"strings"
 	"time"
-
-	"github.com/gogf/gf/v2/frame/g"
 
 	"github.com/bivdex/tron-lion/internal/dao"
 	"github.com/bivdex/tron-lion/internal/model/entity"
-
+	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/os/gcmd"
 	"github.com/gogf/gf/v2/os/gtime"
 )
@@ -26,33 +23,27 @@ var (
 )
 
 func runTronGenerateA(ctx context.Context, parser *gcmd.Parser) (err error) {
-	// 获取参数
+	// 获取生成数量
 	count := g.Cfg().MustGet(ctx, "count", 10000).Int()
-
-	// 如果没有提供参数，使用默认值
 	if count <= 0 {
-		count = 10 // 默认生成10条
+		count = 10
 	}
 
 	fmt.Printf("准备生成 %d 条地址\n", count)
 
-	// 初始化随机数生成器
+	// 初始化随机数
 	rand.Seed(time.Now().UnixNano())
 
-	// 生成并插入数据
-	var records []*entity.TOrderAddressRecordResult
+	// 批量生成记录
+	records := make([]*entity.TOrderAddressRecordResult, 0, count)
 	for i := 0; i < count; i++ {
-		pattern := genFromAddressPart(ctx)
-
-		// 创建记录
-		record := &entity.TOrderAddressRecordResult{
-			FromAddressPart: pattern,
+		records = append(records, &entity.TOrderAddressRecordResult{
+			FromAddressPart: genFromAddressPart(ctx),
 			CreateTime:      gtime.Now(),
-		}
-		records = append(records, record)
+		})
 	}
 
-	// 批量插入数据库
+	// 批量插入
 	_, err = dao.TOrderAddressRecordResult.Ctx(ctx).Insert(records)
 	if err != nil {
 		return fmt.Errorf("插入数据库失败: %v", err)
@@ -60,15 +51,4 @@ func runTronGenerateA(ctx context.Context, parser *gcmd.Parser) (err error) {
 
 	fmt.Printf("成功生成并插入 %d 条地址\n", count)
 	return nil
-}
-
-// 生成指定长度的随机字符串
-func generateRandomString(length int) string {
-	const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-	result := strings.Builder{}
-	for i := 0; i < length; i++ {
-		randomIndex := rand.Intn(len(charset))
-		result.WriteByte(charset[randomIndex])
-	}
-	return result.String()
 }
