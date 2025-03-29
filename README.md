@@ -10,15 +10,16 @@ go mod download
 4. 之后根据需要执行以下不同命令，编译不同的可执行exe文件
 
 ### 生成不同表数据
+ 命令行执行生成可执行文件 main.exe：
 ```bash
 go build -o main.exe main.go
 ```
-生成 A 表, C 表，D 表，E 表
+执行以下命令，可生成 A 表, C 表，D 表，E 表
 ```bash
-./main gen_a
-./main gen_c
-./main gen_d
-./main gen_e
+./main.exe gen_a
+./main.exe gen_c
+./main.exe gen_d
+./main.exe gen_e
 ```
 config.yaml 配置中增加以下参数
 ```yaml
