@@ -433,10 +433,27 @@ func getLimitedPatterns(ctx context.Context) ([]*entity.TOrderAddressRecordResul
 
 // 从私钥获取波场地址
 func getAddressFromPrivateKey(privateKeyHex string) (string, error) {
+	// 清理私钥字符串，移除空格、换行符和其他不可见字符
+	privateKeyHex = strings.TrimSpace(privateKeyHex)
+	privateKeyHex = strings.ReplaceAll(privateKeyHex, "\n", "")
+	privateKeyHex = strings.ReplaceAll(privateKeyHex, "\r", "")
+
+	// 验证私钥长度
+	if len(privateKeyHex) != 64 {
+		return "", fmt.Errorf("私钥长度错误，应为64个十六进制字符，实际长度: %d", len(privateKeyHex))
+	}
+
+	// 验证私钥是否只包含十六进制字符
+	for _, c := range privateKeyHex {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return "", fmt.Errorf("私钥包含非法字符: %c", c)
+		}
+	}
+
 	// 1. 解码私钥
 	privateKeyBytes, err := hex.DecodeString(privateKeyHex)
 	if err != nil {
-		return "", fmt.Errorf("解码私钥失败: %v", err)
+		return "", fmt.Errorf("解码私钥失败: %v, 私钥: %q", err, privateKeyHex)
 	}
 
 	// 2. 从私钥生成公钥
