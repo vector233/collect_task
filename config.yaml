@@ -12,9 +12,10 @@ logger:
 # https://goframe.org/docs/core/gdb-config-file
 database:
   default:
-    link: "mysql:root:1qaz@WSX3edc@tcp(124.221.133.54:3307)/tron"
+    link: "mysql:db_a_root:qT7Wz4H7U3WJ9vFg@tcp(3.34.50.72:3306)/bivdex_a"
 
 tron:
+  count: 100                                     # 生成数据数量, gen_a 有效
   address: "TDqSquXBgUCLYvYC4XZgrprLK589dkhSCf"  # 初始地址
   maxConcurrency: 10                             # 最大并发数
   maxDepth: 100                                  # 最大递归深度

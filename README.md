@@ -24,6 +24,7 @@ go build -o main.exe main.go
 config.yaml 配置中增加以下参数
 ```yaml
 tron:
+  count: 100                                     # 生成数据数量, gen_a 有效
   address: "TDqSquXBgUCLYvYC4XZgrprLK589dkhSCf"  # 初始地址
   maxConcurrency: 20                             # 最大并发数
   maxDepth: 100                                  # 最大递归深度

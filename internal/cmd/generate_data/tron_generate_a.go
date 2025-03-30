@@ -24,7 +24,7 @@ var (
 
 func runTronGenerateA(ctx context.Context, parser *gcmd.Parser) (err error) {
 	// 获取生成数量
-	count := g.Cfg().MustGet(ctx, "count", 10000).Int()
+	count := g.Cfg().MustGet(ctx, "tron.count", 10000).Int()
 	if count <= 0 {
 		count = 10
 	}
