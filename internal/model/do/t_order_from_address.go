@@ -14,5 +14,9 @@ type TOrderFromAddress struct {
 	g.Meta      `orm:"table:t_order_from_address, do:true"`
 	Id          interface{} // 主键
 	FromAddress interface{} // from地址
+	LastAmount  interface{} // 最后到账金额
+	LastTime    *gtime.Time // 最后到账时间
 	CreateTime  *gtime.Time // 创建时间
+	QueryTime   *gtime.Time // 查询时间
+	Balance     interface{} // 余额
 }

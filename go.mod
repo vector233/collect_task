@@ -15,6 +15,7 @@ require (
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1 // indirect
 	github.com/holiman/uint256 v1.3.2 // indirect
 	golang.org/x/crypto v0.36.0 // indirect
+	golang.org/x/time v0.11.0 // indirect
 )
 
 require (

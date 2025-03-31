@@ -23,14 +23,22 @@ type TOrderFromAddressDao struct {
 type TOrderFromAddressColumns struct {
 	Id          string // 主键
 	FromAddress string // from地址
+	LastAmount  string // 最后到账金额
+	LastTime    string // 最后到账时间
 	CreateTime  string // 创建时间
+	QueryTime   string // 查询时间
+	Balance     string // 余额
 }
 
 // tOrderFromAddressColumns holds the columns for the table t_order_from_address.
 var tOrderFromAddressColumns = TOrderFromAddressColumns{
 	Id:          "id",
 	FromAddress: "from_address",
+	LastAmount:  "last_amount",
+	LastTime:    "last_time",
 	CreateTime:  "create_time",
+	QueryTime:   "query_time",
+	Balance:     "balance",
 }
 
 // NewTOrderFromAddressDao creates and returns a new DAO object for table data access.
