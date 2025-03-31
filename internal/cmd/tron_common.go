@@ -140,84 +140,90 @@ func processResultsAndSaveToDB(ctx context.Context, resultChan <-chan MatchResul
 
 	// 保存结果到数据库的函数
 	saveResultsToDB := func() {
-		if len(resultBatch) > 0 {
-			startTime := time.Now()
-			totalDBOperations++
+		if len(resultBatch) == 0 {
+			return // 避免处理空批次
+		}
 
-			var batchMatched int = 0
-			var batchUpdated int = 0
+		startTime := time.Now()
+		totalDBOperations++
 
-			for _, matchResult := range resultBatch {
-				// 解析地址和私钥
-				parts := strings.Split(matchResult.Result, "---")
-				address := matchResult.Pattern // 地址
-				privateAddress := ""
-				if len(parts) > 1 {
-					privateAddress = parts[1]
-				}
+		var batchMatched int = 0
+		var batchUpdated int = 0
 
-				// 使用本地时区的当前时间
-				now := gtime.Now().Local()
+		for _, matchResult := range resultBatch {
+			// 解析地址和私钥
+			parts := strings.Split(matchResult.Result, "---")
+			address := matchResult.Pattern // 地址
+			privateAddress := ""
+			if len(parts) > 1 {
+				privateAddress = parts[1]
+			}
 
-				// 匹配到的任务
-				var matchedPattern string
-				var matchedRecord *entity.TOrderAddressRecordResult
+			// 使用本地时区的当前时间
+			now := gtime.Now().Local()
 
-				// 遍历所有任务，查找匹配的模式
-				for pattern, record := range patternMap {
-					// 检查任务是否匹配地址
-					if matchesPattern(address, pattern) {
-						matchedPattern = pattern
-						matchedRecord = record
-						batchMatched++
-						break
-					}
-				}
+			// 匹配到的任务
+			var matchedPattern string
+			var matchedRecord *entity.TOrderAddressRecordResult
 
-				// 如果找不到匹配的任务，则忽略该结果
-				if matchedPattern == "" || matchedRecord == nil {
-					// fmt.Printf("找不到匹配的任务模式，忽略结果: Address=%s\n", address)
-					continue
-				}
-
-				// 如果记录已存在且address为空，则更新记录
-				if matchedRecord.Address == "" {
-					// 更新记录
-					_, err := dao.TOrderAddressRecordResult.Ctx(dbCtx).
-						Data(g.Map{
-							"address":            address,
-							"private_address":    privateAddress,
-							"match_success_time": now,
-						}).
-						Where("from_address_part = ?", matchedPattern).
-						Update()
-
-					if err != nil {
-						fmt.Printf("更新结果到数据库失败: %v\n", err)
-					} else {
-						batchUpdated++
-					}
-					patternMap[matchedPattern].Address = matchResult.Result
-					patternMap[matchedPattern].PrivateAddress = privateAddress
-					patternMap[matchedPattern].MatchSuccessTime = now
+			// 遍历所有任务，查找匹配的模式
+			for pattern, record := range patternMap {
+				// 检查任务是否匹配地址
+				if matchesPattern(address, pattern) {
+					matchedPattern = pattern
+					matchedRecord = record
+					batchMatched++
+					break
 				}
 			}
 
-			// 更新统计数据
-			totalProcessed += len(resultBatch)
-			totalMatched += batchMatched
-			totalUpdated += batchUpdated
+			// 如果找不到匹配的任务，则忽略该结果
+			if matchedPattern == "" || matchedRecord == nil {
+				continue
+			}
 
-			// 计算并记录数据库操作耗时
-			dbTime := time.Since(startTime)
-			totalDBTime += dbTime
+			// 如果记录已存在且address为空，则更新记录
+			if matchedRecord.Address == "" {
+				// 更新记录
+				_, err := dao.TOrderAddressRecordResult.Ctx(dbCtx).
+					Data(g.Map{
+						"address":            address,
+						"private_address":    privateAddress,
+						"match_success_time": now,
+					}).
+					Where("from_address_part = ?", matchedPattern).
+					Update()
 
-			// 输出本次批处理统计
-			fmt.Printf("数据库批处理完成: 批次大小=%d, 匹配=%d, 更新=%d, 耗时=%v, 平均每条=%v\n",
-				len(resultBatch), batchMatched, batchUpdated, dbTime, dbTime/time.Duration(len(resultBatch)))
-
-			resultBatch = resultBatch[:0]
+				if err != nil {
+					fmt.Printf("更新结果到数据库失败: %v\n", err)
+					continue // 出错时跳过当前记录，继续处理其他记录
+				} else {
+					batchUpdated++
+					// 更新本地缓存，避免重复处理
+					if record, ok := patternMap[matchedPattern]; ok {
+						record.Address = address
+						record.PrivateAddress = privateAddress
+						record.MatchSuccessTime = now
+					}
+				}
+			}
 		}
+
+		// 更新统计数据
+		totalProcessed += len(resultBatch)
+		totalMatched += batchMatched
+		totalUpdated += batchUpdated
+
+		// 计算并记录数据库操作耗时
+		dbTime := time.Since(startTime)
+		totalDBTime += dbTime
+
+		// 输出本次批处理统计
+		fmt.Printf("数据库批处理完成: 批次大小=%d, 匹配=%d, 更新=%d, 耗时=%v, 平均每条=%v\n",
+			len(resultBatch), batchMatched, batchUpdated, dbTime,
+			dbTime/time.Duration(max(len(resultBatch), 1))) // 避免除零
+
+		resultBatch = resultBatch[:0]
 	}
 
 	for {
@@ -225,9 +231,11 @@ func processResultsAndSaveToDB(ctx context.Context, resultChan <-chan MatchResul
 		case <-ctx.Done():
 			// 上下文被取消，保存剩余结果并退出
 			saveResultsToDB()
-			fmt.Printf("数据库处理总结: 总处理=%d, 总匹配=%d, 总更新=%d, 数据库操作=%d, 总耗时=%v, 平均每批=%v\n",
-				totalProcessed, totalMatched, totalUpdated, totalDBOperations, totalDBTime,
-				totalDBTime/time.Duration(totalDBOperations))
+			if totalDBOperations > 0 {
+				fmt.Printf("数据库处理总结: 总处理=%d, 总匹配=%d, 总更新=%d, 数据库操作=%d, 总耗时=%v, 平均每批=%v\n",
+					totalProcessed, totalMatched, totalUpdated, totalDBOperations, totalDBTime,
+					totalDBTime/time.Duration(totalDBOperations))
+			}
 			return
 
 		case <-statsTicker.C:
@@ -242,9 +250,11 @@ func processResultsAndSaveToDB(ctx context.Context, resultChan <-chan MatchResul
 			if !ok {
 				// 通道已关闭，保存剩余结果并退出
 				saveResultsToDB()
-				fmt.Printf("数据库处理总结: 总处理=%d, 总匹配=%d, 总更新=%d, 数据库操作=%d, 总耗时=%v, 平均每批=%v\n",
-					totalProcessed, totalMatched, totalUpdated, totalDBOperations, totalDBTime,
-					totalDBTime/time.Duration(totalDBOperations))
+				if totalDBOperations > 0 {
+					fmt.Printf("数据库处理总结: 总处理=%d, 总匹配=%d, 总更新=%d, 数据库操作=%d, 总耗时=%v, 平均每批=%v\n",
+						totalProcessed, totalMatched, totalUpdated, totalDBOperations, totalDBTime,
+						totalDBTime/time.Duration(totalDBOperations))
+				}
 				return
 			}
 
@@ -260,6 +270,14 @@ func processResultsAndSaveToDB(ctx context.Context, resultChan <-chan MatchResul
 			saveResultsToDB()
 		}
 	}
+}
+
+// 辅助函数：返回两个整数中的较大值
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 // 检查地址是否匹配任务
