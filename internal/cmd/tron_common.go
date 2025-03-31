@@ -121,6 +121,17 @@ func processResultsAndSaveToDB(ctx context.Context, resultChan <-chan MatchResul
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
+	// 添加统计变量
+	var totalProcessed int = 0
+	var totalMatched int = 0
+	var totalUpdated int = 0
+	var totalDBOperations int = 0
+	var totalDBTime time.Duration = 0
+
+	// 添加统计日志定时器
+	statsTicker := time.NewTicker(60 * time.Second) // 每分钟输出一次统计
+	defer statsTicker.Stop()
+
 	// 创建任务map，用于正则判断结果是否属于该任务
 	patternMap := make(map[string]*entity.TOrderAddressRecordResult)
 	for _, p := range patterns {
@@ -130,6 +141,12 @@ func processResultsAndSaveToDB(ctx context.Context, resultChan <-chan MatchResul
 	// 保存结果到数据库的函数
 	saveResultsToDB := func() {
 		if len(resultBatch) > 0 {
+			startTime := time.Now()
+			totalDBOperations++
+
+			var batchMatched int = 0
+			var batchUpdated int = 0
+
 			for _, matchResult := range resultBatch {
 				// 解析地址和私钥
 				parts := strings.Split(matchResult.Result, "---")
@@ -152,6 +169,7 @@ func processResultsAndSaveToDB(ctx context.Context, resultChan <-chan MatchResul
 					if matchesPattern(address, pattern) {
 						matchedPattern = pattern
 						matchedRecord = record
+						batchMatched++
 						break
 					}
 				}
@@ -176,12 +194,29 @@ func processResultsAndSaveToDB(ctx context.Context, resultChan <-chan MatchResul
 
 					if err != nil {
 						fmt.Printf("更新结果到数据库失败: %v\n", err)
+					} else {
+						batchUpdated++
 					}
-					//} else {
-					//fmt.Printf("任务记录已有结果，忽略更新: FromAddressPart=%s\n", matchedPattern)
+					patternMap[matchedPattern].Address = matchResult.Result
+					patternMap[matchedPattern].PrivateAddress = privateAddress
+					patternMap[matchedPattern].MatchSuccessTime = now
 				}
 			}
 
+			// 更新统计数据
+			totalProcessed += len(resultBatch)
+			totalMatched += batchMatched
+			totalUpdated += batchUpdated
+
+			// 计算并记录数据库操作耗时
+			dbTime := time.Since(startTime)
+			totalDBTime += dbTime
+
+			// 输出本次批处理统计
+			fmt.Printf("数据库批处理完成: 批次大小=%d, 匹配=%d, 更新=%d, 耗时=%v, 平均每条=%v\n",
+				len(resultBatch), batchMatched, batchUpdated, dbTime, dbTime/time.Duration(len(resultBatch)))
+
+			resultBatch = resultBatch[:0]
 		}
 	}
 
@@ -190,11 +225,26 @@ func processResultsAndSaveToDB(ctx context.Context, resultChan <-chan MatchResul
 		case <-ctx.Done():
 			// 上下文被取消，保存剩余结果并退出
 			saveResultsToDB()
+			fmt.Printf("数据库处理总结: 总处理=%d, 总匹配=%d, 总更新=%d, 数据库操作=%d, 总耗时=%v, 平均每批=%v\n",
+				totalProcessed, totalMatched, totalUpdated, totalDBOperations, totalDBTime,
+				totalDBTime/time.Duration(totalDBOperations))
 			return
+
+		case <-statsTicker.C:
+			// 定期输出性能统计
+			if totalDBOperations > 0 {
+				fmt.Printf("数据库性能统计: 已处理=%d, 已匹配=%d, 已更新=%d, 操作次数=%d, 总耗时=%v, 平均每批=%v\n",
+					totalProcessed, totalMatched, totalUpdated, totalDBOperations, totalDBTime,
+					totalDBTime/time.Duration(totalDBOperations))
+			}
+
 		case matchResult, ok := <-resultChan:
 			if !ok {
 				// 通道已关闭，保存剩余结果并退出
 				saveResultsToDB()
+				fmt.Printf("数据库处理总结: 总处理=%d, 总匹配=%d, 总更新=%d, 数据库操作=%d, 总耗时=%v, 平均每批=%v\n",
+					totalProcessed, totalMatched, totalUpdated, totalDBOperations, totalDBTime,
+					totalDBTime/time.Duration(totalDBOperations))
 				return
 			}
 
@@ -366,10 +416,18 @@ func watchOutputFile(ctx context.Context, outputFile string, resultChan chan<- M
 						Result:  line,        // 保存完整结果
 					}
 
-					// 尝试发送到处理通道
+					//  根据等待时间检测处理通道是否阻塞
+					startTime := time.Now()
 					select {
 					case resultChan <- matchResult:
-						fmt.Printf("发送结果到处理通道: %s\n", addressPart)
+						// 检查是否发生阻塞（超过500ms视为明显阻塞）
+						blockTime := time.Since(startTime)
+						if blockTime > 500*time.Millisecond {
+							fmt.Printf("[文件监视器-%d] 通道阻塞: 地址=%s, 阻塞时间=%v\n",
+								idx, addressPart, blockTime)
+						} else {
+							fmt.Printf("发送结果到处理通道: %s\n", addressPart)
+						}
 					case <-ctx.Done():
 						// 删除临时文件
 						os.Remove(oldFile)

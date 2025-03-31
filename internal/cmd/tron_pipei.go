@@ -101,7 +101,7 @@ func runOnePipeiMatch(ctx context.Context, gpuCount int, deadline time.Time, ini
 	// 注册信号处理，传入cancel函数
 	setupSignalHandler(tempDir, cancel)
 
-	resultChan := make(chan MatchResult, 100)
+	resultChan := make(chan MatchResult, 1000)
 
 	// 启动数据库处理goroutine
 	var wgDB sync.WaitGroup
