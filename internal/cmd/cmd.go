@@ -5,6 +5,7 @@ import (
 
 	"github.com/gogf/gf/v2/os/gcmd"
 
+	"github.com/bivdex/tron-lion/internal/cmd/analysis" // 添加这一行
 	"github.com/bivdex/tron-lion/internal/cmd/generate_data"
 )
 
@@ -36,6 +37,8 @@ func init() {
 		&generate_data.TronGenerateE,
 		&generate_data.TronGenerateD,
 		&generate_data.TronGenerateC,
+		&analysis.TronCron,
+		&analysis.TronBalance,
 	)
 	if err != nil {
 		panic(err)

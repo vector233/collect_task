@@ -12,9 +12,31 @@ logger:
 # https://goframe.org/docs/core/gdb-config-file
 database:
   default:
-    link: "mysql:db_a_root:qT7Wz4H7U3WJ9vFg@tcp(3.34.50.72:3306)/bivdex_a"
+    link: "mysql:db_e_root:g5G6ymyedAmk5wgb@tcp(3.34.50.72:3306)/bivdex_e"
+    # 数据库连接池配置
+    maxIdle: 10           # 连接池最大空闲连接数
+    maxOpen: 500          # 连接池最大打开连接数
+    maxLifetime: 30       # 连接对象最长生命周期(秒)
 
 tron:
+  # API 相关配置
+  api:
+    baseURL: "http://104.233.192.15:8090"  # TRON API 基础URL
+    key: ""                                # TRON API 密钥
+    timeout: 30                            # API 请求超时时间(秒)
+    rateLimit:
+      requestsPerSecond: 200                # api 每秒请求数限制
+      bucket: 100                           # 令牌桶容量
+    usdt:
+      contract: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"  # USDT 合约地址
+  
+  # 余额刷新相关配置
+  balance:
+    table: "t_order_from_address"          # 要查询的表名
+    concurrency: 200                       # 并发处理多少批次数据
+    batchSize: 30                         # 并发处理的批次大小
+    cron: "0 */30 * * * *"                 # 定时任务执行周期(每30分钟)
+
   count: 100                                     # 生成数据数量, gen_a 有效
   address: "TDqSquXBgUCLYvYC4XZgrprLK589dkhSCf"  # 初始地址
   maxConcurrency: 10                             # 最大并发数

@@ -119,7 +119,7 @@ func TestGetUSDTTransactions(t *testing.T) {
 		testAddress := "TDqSquXBgUCLYvYC4XZgrprLK589dkhSCf"
 
 		// 调用GetUSDTTransactions方法，获取最近10条交易
-		transactions, err := api.GetUSDTTransactions(context.Background(), testAddress, 10, 0)
+		transactions, err := api.GetUSDTTransactions(context.Background(), testAddress, 10, 0, false)
 
 		// 验证结果
 		if err != nil {
@@ -186,6 +186,41 @@ func TestGetIncomingUSDTTransactions(t *testing.T) {
 			for _, tx := range transactions {
 				t.Assert(strings.EqualFold(tx.To, testAddress), true)
 			}
+		}
+	})
+}
+
+// TestGetLatestBlock 测试获取最新区块功能
+func TestGetLatestBlock(t *testing.T) {
+	gtest.C(t, func(t *gtest.T) {
+		// 创建API客户端
+		api := NewTronAPI(
+			"https://api.trongrid.io", // 使用波场主网API
+			"",                        // 这里填入您的API密钥
+		)
+
+		// 设置较长的超时时间
+		api.HttpTimeout = time.Second * 30
+
+		// 调用GetLatestBlock方法
+		block, err := api.GetLatestBlock(context.Background())
+
+		// 验证结果
+		if err != nil {
+			t.Logf("获取最新区块失败: %v", err)
+		} else {
+			t.Log("区块ID:", block.BlockID)
+			t.Log("区块高度:", block.BlockNumber)
+			t.Log("区块时间:", block.BlockTime.Format("2006-01-02 15:04:05"))
+			t.Log("交易数量:", block.TransactionNum)
+			if block.TransactionNum > 0 && len(block.Transactions) > 0 {
+				t.Log("第一笔交易ID:", block.Transactions[0])
+			}
+
+			// 验证区块高度大于0
+			t.Assert(block.BlockNumber > 0, true)
+			// 验证区块ID不为空
+			t.Assert(len(block.BlockID) > 0, true)
 		}
 	})
 }

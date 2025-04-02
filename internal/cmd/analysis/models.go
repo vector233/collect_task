@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// Block 表示波场区块信息
+// Block 区块信息
 type Block struct {
 	BlockID        string    `json:"block_id"`
 	BlockNumber    int64     `json:"block_number"`
@@ -13,10 +13,10 @@ type Block struct {
 	TransactionNum int       `json:"transaction_num"`
 	Transactions   []string  `json:"transactions"`
 	Confirmed      bool      `json:"confirmed"`
-	BlockTime      time.Time `json:"-"` // 转换后的时间
+	BlockTime      time.Time `json:"-"` // 转换后时间
 }
 
-// Transaction 表示交易详情
+// Transaction 交易信息
 type Transaction struct {
 	TxID           string    `json:"tx_id"`
 	BlockNumber    int64     `json:"block_number"`
@@ -26,7 +26,7 @@ type Transaction struct {
 	Amount         float64   `json:"amount"`
 	ContractType   string    `json:"contract_type"`
 	Status         string    `json:"status"`
-	Timestamp      time.Time `json:"-"` // 转换后的时间
+	Timestamp      time.Time `json:"-"` // 转换后时间
 }
 
 // BlockResponse 表示波场区块API响应
@@ -148,7 +148,7 @@ type TRC20Transaction struct {
 	TokenDecimals  int       `json:"token_decimals"`
 	Status         string    `json:"status"`
 	Confirmed      bool      `json:"confirmed"`
-	Timestamp      time.Time `json:"-"` // 转换后的时间
+	Timestamp      time.Time `json:"-"` // 转换后时间
 }
 
 // APIErrorResponse 表示API错误响应
