@@ -9,11 +9,43 @@ go mod download
 ```
 4. 之后根据需要执行以下不同命令，编译不同的可执行exe文件
 
-### 生成不同表数据
+### 编译 main.exe 可执行文件
  命令行执行生成可执行文件 main.exe：
 ```bash
 go build -o main.exe main.go
 ```
+### 刷新余额 
+执行以下命令启动定时任务
+```bash
+./main.exe cron
+```
+执行以下命令单次刷新 e库地址余额
+```bash
+./main.exe balance
+```
+相关配置如下：
+```yaml
+tron:
+  # API 相关配置
+  api:
+    baseURL: "http://104.233.192.15:8090"  # TRON API 基础URL
+    key: ""                                # TRON API 密钥
+    timeout: 30                            # API 请求超时时间(秒)
+    rateLimit:
+      requestsPerSecond: 200                # api 每秒请求数限制
+      bucket: 100                           # 令牌桶容量
+    usdt:
+      contract: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"  # USDT 合约地址
+  
+  # 余额刷新相关配置
+  balance:
+    table: "t_order_from_address"          # 要查询的表名
+    concurrency: 200                       # 并发处理多少批次数据
+    batchSize: 30                         # 并发处理的批次大小
+    cron: "0 */30 * * * *"                 # 定时任务执行周期(每30分钟)
+```
+
+### 生成不同表数据
 执行以下命令，可生成 A 表, C 表，D 表，E 表
 ```bash
 ./main.exe gen_a
