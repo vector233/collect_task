@@ -13,7 +13,7 @@ import (
 	"github.com/gogf/gf/v2/os/gcmd"
 	"github.com/gogf/gf/v2/os/gtime"
 
-	"github.com/bivdex/tron-lion/internal/dao"
+	"tron-lion/internal/dao"
 )
 
 var (

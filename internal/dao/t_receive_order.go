@@ -5,7 +5,7 @@
 package dao
 
 import (
-	"github.com/bivdex/tron-lion/internal/dao/internal"
+	"tron-lion/internal/dao/internal"
 )
 
 // tReceiveOrderDao is the data access object for the table t_receive_order.

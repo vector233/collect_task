@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bivdex/tron-lion/internal/model/entity"
+	"tron-lion/internal/model/entity"
 
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/os/gcmd"

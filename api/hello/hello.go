@@ -7,7 +7,7 @@ package hello
 import (
 	"context"
 
-	"github.com/bivdex/tron-lion/api/hello/v1"
+	"tron-lion/api/hello/v1"
 )
 
 type IHelloV1 interface {

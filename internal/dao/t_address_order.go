@@ -8,8 +8,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/bivdex/tron-lion/internal/dao/internal"
-	"github.com/bivdex/tron-lion/internal/model/entity"
+	"tron-lion/internal/dao/internal"
+	"tron-lion/internal/model/entity"
 )
 
 // tAddressOrderDao is the data access object for the table t_address_order.

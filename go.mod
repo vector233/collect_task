@@ -1,4 +1,4 @@
-module github.com/bivdex/tron-lion
+module tron-lion
 
 go 1.23.0
 

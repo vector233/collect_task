@@ -5,7 +5,7 @@ import (
 
 	"github.com/gogf/gf/v2/frame/g"
 
-	v1 "github.com/bivdex/tron-lion/api/hello/v1"
+	v1 "tron-lion/api/hello/v1"
 )
 
 func (c *ControllerV1) Hello(ctx context.Context, req *v1.HelloReq) (res *v1.HelloRes, err error) {

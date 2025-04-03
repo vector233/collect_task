@@ -6,7 +6,7 @@ server:
 
 # https://goframe.org/docs/core/glog-config
 logger:
-  level : "all"
+  level : "info"
   stdout: true
 
 # https://goframe.org/docs/core/gdb-config-file

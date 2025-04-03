@@ -5,7 +5,7 @@
 package dao
 
 import (
-	"github.com/bivdex/tron-lion/internal/dao/internal"
+	"tron-lion/internal/dao/internal"
 )
 
 // internalTOrderAddressRecordResultDao is an internal type for wrapping the internal DAO implementation.

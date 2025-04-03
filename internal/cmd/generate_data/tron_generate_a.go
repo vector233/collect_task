@@ -6,8 +6,9 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/bivdex/tron-lion/internal/dao"
-	"github.com/bivdex/tron-lion/internal/model/entity"
+	"tron-lion/internal/dao"
+	"tron-lion/internal/model/entity"
+
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/os/gcmd"
 	"github.com/gogf/gf/v2/os/gtime"

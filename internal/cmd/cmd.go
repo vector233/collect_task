@@ -5,8 +5,8 @@ import (
 
 	"github.com/gogf/gf/v2/os/gcmd"
 
-	"github.com/bivdex/tron-lion/internal/cmd/analysis" // 添加这一行
-	"github.com/bivdex/tron-lion/internal/cmd/generate_data"
+	"tron-lion/internal/cmd/analysis" // 添加这一行
+	"tron-lion/internal/cmd/generate_data"
 )
 
 var (
