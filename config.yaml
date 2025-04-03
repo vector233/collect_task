@@ -12,7 +12,8 @@ logger:
 # https://goframe.org/docs/core/gdb-config-file
 database:
   default:
-    link: "mysql:db_e_root:g5G6ymyedAmk5wgb@tcp(3.34.50.72:3306)/bivdex_e"
+    # link: "mysql:db_e_root:g5G6ymyedAmk5wgb@tcp(3.34.50.72:3306)/bivdex_e"
+    link: "mysql:root:1qaz@WSX3edc@tcp(124.221.133.54:3307)/tron?charset=utf8mb4&parseTime=True&loc=Local"
     # 数据库连接池配置
     maxIdle: 10           # 连接池最大空闲连接数
     maxOpen: 500          # 连接池最大打开连接数
@@ -26,15 +27,15 @@ tron:
     timeout: 30                            # API 请求超时时间(秒)
     rateLimit:
       requestsPerSecond: 200                # api 每秒请求数限制
-      bucket: 100                           # 令牌桶容量
+      bucket: 200                           # 令牌桶容量
     usdt:
       contract: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"  # USDT 合约地址
   
   # 余额刷新相关配置
   balance:
     table: "t_order_from_address"          # 要查询的表名
-    concurrency: 200                       # 并发处理多少批次数据
-    batchSize: 30                         # 并发处理的批次大小
+    concurrency: 200                       # 并发处理多少地址
+    batchSize: 200                         # 并发处理的写入批次大小
     cron: "0 */30 * * * *"                 # 定时任务执行周期(每30分钟)
 
   count: 100                                     # 生成数据数量, gen_a 有效

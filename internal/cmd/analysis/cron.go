@@ -56,11 +56,11 @@ func initAPIAndMonitor(ctx context.Context) (*TronAPI, *BalanceMonitor) {
 	monitor.SetTable(tableName)
 
 	// 设置并发数
-	concurrency := g.Cfg().MustGet(ctx, "tron.balance.concurrency", 15).Int()
+	concurrency := g.Cfg().MustGet(ctx, "tron.balance.concurrency", 200).Int()
 	monitor.SetConcurrency(concurrency)
 
 	// 设置批处理大小
-	batchSize := g.Cfg().MustGet(ctx, "tron.balance.batchSize", 50).Int()
+	batchSize := g.Cfg().MustGet(ctx, "tron.balance.batchSize", 200).Int()
 	monitor.SetBatchSize(batchSize)
 
 	return tronAPI, monitor

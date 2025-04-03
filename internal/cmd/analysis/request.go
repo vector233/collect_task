@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gogf/gf/v2/frame/g"
 	"github.com/shengdoushi/base58"
 	"golang.org/x/time/rate"
 )
@@ -61,6 +62,17 @@ func (t *TronAPI) doRequest(ctx context.Context, req *http.Request) (*http.Respo
 	t.limiterMu.Lock()
 	limiter := t.limiter
 	t.limiterMu.Unlock()
+
+	// 打印限流器状态
+	tokens := limiter.Tokens()
+	limit := limiter.Limit()
+	burst := limiter.Burst()
+	g.Log().Debugf(ctx, "限流器状态: 当前令牌数=%.2f, 限制=%.2f/秒, 桶容量=%d", tokens, float64(limit), burst)
+
+	// 检查是否接近限流阈值
+	if tokens < float64(burst)*0.2 {
+		g.Log().Debugf(ctx, "警告: 限流器令牌数量较低 (%.2f/%d), 接近限流阈值", tokens, burst)
+	}
 
 	// 等待令牌
 	if err := limiter.Wait(ctx); err != nil {
