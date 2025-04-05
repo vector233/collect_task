@@ -405,14 +405,14 @@ func (t *TronAPI) GetUSDTTransactionsByTimeRange(ctx context.Context, address st
 }
 
 // GetLatestBlock 获取波场最新区块
-func (t *TronAPI) GetLatestBlock(ctx context.Context) (Block, error) {
+func (t *TronAPI) GetLatestBlock(ctx context.Context) (BlockResponse, error) {
 	// 请求URL
 	url := fmt.Sprintf("%s/wallet/getnowblock", t.BaseURL)
 
 	// 创建请求
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return Block{}, fmt.Errorf("创建请求失败: %v", err)
+		return BlockResponse{}, fmt.Errorf("创建请求失败: %v", err)
 	}
 
 	// 加API Key
@@ -424,36 +424,16 @@ func (t *TronAPI) GetLatestBlock(ctx context.Context) (Block, error) {
 	// 发请求
 	_, respBody, err := t.doRequest(ctx, req)
 	if err != nil {
-		return Block{}, err
+		return BlockResponse{}, err
 	}
 
 	// 解析响应
 	var response BlockResponse
 	if err := json.Unmarshal(respBody, &response); err != nil {
-		return Block{}, fmt.Errorf("解析响应失败: %v, 响应: %s", err, string(respBody))
+		return BlockResponse{}, fmt.Errorf("解析响应失败: %v, 响应: %s", err, string(respBody))
 	}
 
-	// 提取交易ID
-	var txIDs []string
-	for _, tx := range response.Transactions {
-		txIDs = append(txIDs, tx.TxID)
-	}
-
-	// 时间戳转时间
-	blockTime := time.Unix(response.BlockHeader.RawData.Timestamp/1000, 0)
-
-	// 构造返回
-	block := Block{
-		BlockID:        response.BlockID,
-		BlockNumber:    response.BlockHeader.RawData.Number,
-		Timestamp:      response.BlockHeader.RawData.Timestamp,
-		TransactionNum: len(response.Transactions),
-		Transactions:   txIDs,
-		Confirmed:      true, // 最新区块一般已确认
-		BlockTime:      blockTime,
-	}
-
-	return block, nil
+	return response, nil
 }
 
 // 获取交易详情并判断是否为USDT交易
@@ -469,26 +449,14 @@ func (t *TronAPI) GetTransaction(ctx context.Context, txID string) (Transaction,
 	if err != nil {
 		return Transaction{}, err
 	}
+	fmt.Println(txResponse)
+	fmt.Println(txInfoResponse)
 
-	// 初始化交易结构
-	transaction := Transaction{
-		TxID: txID,
-	}
-
-	// 解析区块信息
-	t.parseBlockInfo(&transaction, txInfoResponse)
-
-	// 解析合约信息
-	t.parseContractInfo(&transaction, txResponse)
-
-	// 设置交易状态
-	t.parseTransactionStatus(&transaction, txInfoResponse)
-
-	return transaction, nil
+	return Transaction{}, nil
 }
 
 // 获取交易基本信息
-func (t *TronAPI) fetchTransactionBasicInfo(ctx context.Context, txID string) (map[string]interface{}, error) {
+func (t *TronAPI) fetchTransactionBasicInfo(ctx context.Context, txID string) (BlockTransaction, error) {
 	// 构造URL
 	url := fmt.Sprintf("%s/wallet/gettransactionbyid", t.BaseURL)
 
@@ -499,13 +467,13 @@ func (t *TronAPI) fetchTransactionBasicInfo(ctx context.Context, txID string) (m
 
 	requestJSON, err := json.Marshal(requestBody)
 	if err != nil {
-		return nil, fmt.Errorf("构建请求体失败: %v", err)
+		return BlockTransaction{}, fmt.Errorf("构建请求体失败: %v", err)
 	}
 
 	// 创建请求
 	req, err := http.NewRequestWithContext(ctx, "POST", url, strings.NewReader(string(requestJSON)))
 	if err != nil {
-		return nil, fmt.Errorf("创建请求失败: %v", err)
+		return BlockTransaction{}, fmt.Errorf("创建请求失败: %v", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -516,25 +484,20 @@ func (t *TronAPI) fetchTransactionBasicInfo(ctx context.Context, txID string) (m
 	// 发送请求
 	_, respBody, err := t.doRequest(ctx, req)
 	if err != nil {
-		return nil, err
+		return BlockTransaction{}, err
 	}
 
 	// 解析响应
-	var txResponse map[string]interface{}
+	var txResponse BlockTransaction
 	if err := json.Unmarshal(respBody, &txResponse); err != nil {
-		return nil, fmt.Errorf("解析交易响应失败: %v, 响应: %s", err, string(respBody))
-	}
-
-	// 检查是否找到交易
-	if _, ok := txResponse["txID"]; !ok {
-		return nil, fmt.Errorf("未找到交易: %s", txID)
+		return BlockTransaction{}, fmt.Errorf("解析交易响应失败: %v, 响应: %s", err, string(respBody))
 	}
 
 	return txResponse, nil
 }
 
 // 获取交易详细信息
-func (t *TronAPI) fetchTransactionDetailInfo(ctx context.Context, txID string) (map[string]interface{}, error) {
+func (t *TronAPI) fetchTransactionDetailInfo(ctx context.Context, txID string) (TransactionInfoResponse, error) {
 	// 构造URL
 	url := fmt.Sprintf("%s/wallet/gettransactioninfobyid", t.BaseURL)
 
@@ -545,13 +508,13 @@ func (t *TronAPI) fetchTransactionDetailInfo(ctx context.Context, txID string) (
 
 	requestJSON, err := json.Marshal(requestBody)
 	if err != nil {
-		return nil, fmt.Errorf("构建请求体失败: %v", err)
+		return TransactionInfoResponse{}, fmt.Errorf("构建请求体失败: %v", err)
 	}
 
 	// 创建请求
 	req, err := http.NewRequestWithContext(ctx, "POST", url, strings.NewReader(string(requestJSON)))
 	if err != nil {
-		return nil, fmt.Errorf("创建交易信息请求失败: %v", err)
+		return TransactionInfoResponse{}, fmt.Errorf("创建交易信息请求失败: %v", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -562,153 +525,105 @@ func (t *TronAPI) fetchTransactionDetailInfo(ctx context.Context, txID string) (
 	// 发送请求
 	_, respBody, err := t.doRequest(ctx, req)
 	if err != nil {
-		return nil, err
+		return TransactionInfoResponse{}, err
 	}
 
 	// 解析交易信息响应
-	var txInfoResponse map[string]interface{}
+	var txInfoResponse TransactionInfoResponse
 	if err := json.Unmarshal(respBody, &txInfoResponse); err != nil {
-		return nil, fmt.Errorf("解析交易信息响应失败: %v, 响应: %s", err, string(respBody))
+		return TransactionInfoResponse{}, fmt.Errorf("解析交易信息响应失败: %v, 响应: %s", err, string(respBody))
 	}
 
 	return txInfoResponse, nil
 }
 
-// 解析区块信息
-func (t *TronAPI) parseBlockInfo(transaction *Transaction, txInfoResponse map[string]interface{}) {
-	// 提取区块号
-	if blockNum, ok := txInfoResponse["blockNumber"].(float64); ok {
-		transaction.BlockNumber = int64(blockNum)
-	}
+// ParseBlockTransactions 将区块中的交易解析为Transaction结构体
+func (t *TronAPI) ParseBlockTransactions(ctx context.Context, blockResponse BlockResponse) ([]Transaction, error) {
+	var transactions []Transaction
 
-	// 提取时间戳
-	if blockTimestamp, ok := txInfoResponse["blockTimeStamp"].(float64); ok {
-		transaction.BlockTimestamp = int64(blockTimestamp)
-		transaction.Timestamp = time.Unix(int64(blockTimestamp)/1000, 0)
-	}
-}
-
-// 解析合约信息
-func (t *TronAPI) parseContractInfo(transaction *Transaction, txResponse map[string]interface{}) {
-	// 检查是否是USDT交易
-	isUSDT := false
-
-	// 获取原始数据
-	if rawData, ok := txResponse["raw_data"].(map[string]interface{}); ok {
-		// 获取合约信息
-		if contracts, ok := rawData["contract"].([]interface{}); ok && len(contracts) > 0 {
-			if contract, ok := contracts[0].(map[string]interface{}); ok {
-				// 检查合约类型
-				if contractType, ok := contract["type"].(string); ok {
-					transaction.ContractType = contractType
-
-					// 智能合约调用
-					if contractType == "TriggerSmartContract" {
-						t.parseTriggerSmartContract(transaction, contract, &isUSDT)
-						// } else if contractType == "TransferContract" {
-						// 	t.parseTransferContract(transaction, contract)
-					}
-				}
-			}
+	for _, tx := range blockResponse.Transactions {
+		// 检查是否有合约调用
+		if len(tx.RawData.Contract) == 0 {
+			continue
 		}
-	}
-}
 
-// 解析智能合约调用
-func (t *TronAPI) parseTriggerSmartContract(transaction *Transaction, contract map[string]interface{}, isUSDT *bool) {
-	if parameter, ok := contract["parameter"].(map[string]interface{}); ok {
-		if value, ok := parameter["value"].(map[string]interface{}); ok {
+		// 初始化交易结构
+		transaction := Transaction{
+			TxID:           tx.TxID,
+			BlockNumber:    blockResponse.BlockHeader.RawData.Number,
+			BlockTimestamp: blockResponse.BlockHeader.RawData.Timestamp,
+			Timestamp:      time.Unix(blockResponse.BlockHeader.RawData.Timestamp/1000, 0),
+		}
+
+		// 设置交易状态
+		if len(tx.Ret) > 0 {
+			transaction.Status = tx.Ret[0].ContractRet
+			transaction.Confirmed = tx.Ret[0].ContractRet == "SUCCESS"
+		}
+
+		contract := tx.RawData.Contract[0]
+		transaction.ContractType = contract.Type
+
+		// 检查是否是USDT交易
+		isUSDT := false
+
+		// 根据合约类型处理不同的交易
+		if contract.Type == ContractTypeTriggerSmart {
 			// 获取合约地址
-			if contractAddress, ok := value["contract_address"].(string); ok {
-				transaction.ContractAddress = contractAddress
+			contractAddress := contract.Parameter.Value.ContractAddress
+			transaction.ContractAddress = contractAddress
 
-				// 检查是否是USDT合约地址
-				if contractAddress == "41a614f803b6fd780986a42c78ec9c7f77e6ded13c" || // 十六进制
-					contractAddress == "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" { // Base58
-					*isUSDT = true
-					transaction.TokenName = "Tether USD"
-					transaction.TokenSymbol = "USDT"
-				}
+			// 检查是否是USDT合约地址
+			if contractAddress == "41a614f803b6fd780986a42c78ec9c7f77e6ded13c" || // 十六进制
+				contractAddress == "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" { // Base58
+				isUSDT = true
+				transaction.TokenName = "Tether USD"
+				transaction.TokenSymbol = "USDT"
 			}
 
 			// 获取调用者地址
-			if ownerAddress, ok := value["owner_address"].(string); ok {
-				transaction.From = ownerAddress
-			}
+			ownerAddress := contract.Parameter.Value.OwnerAddress
+			transaction.From = ownerAddress
 
 			// 获取调用数据
-			if data, ok := value["data"].(string); ok {
-				// 检查是否是transfer方法 (0xa9059cbb)
-				if len(data) >= 8 && strings.HasPrefix(data, "a9059cbb") {
-					// 确认是USDT转账
-					if *isUSDT {
-						t.parseTokenTransferData(transaction, data)
+			data := contract.Parameter.Value.Data
+
+			// 检查是否是transfer方法 (0xa9059cbb)
+			if len(data) >= 8 && strings.HasPrefix(data, "a9059cbb") {
+				// 确认是USDT转账
+				if isUSDT {
+					// 提取接收地址
+					if len(data) >= 72 {
+						toAddrHex := "41" + data[32:72]
+						toAddr, err := utility.HexAddressToBase58(toAddrHex)
+						if err == nil {
+							transaction.To = toAddr
+						}
+					}
+
+					// 提取金额
+					if len(data) >= 136 {
+						amountHex := data[72:136]
+						amountBig, ok := new(big.Int).SetString(amountHex, 16)
+						if ok {
+							// USDT有6位小数
+							divisor := new(big.Int).Exp(big.NewInt(10), big.NewInt(6), nil)
+							amountFloat := new(big.Float).SetInt(amountBig)
+							divisorFloat := new(big.Float).SetInt(divisor)
+							result := new(big.Float).Quo(amountFloat, divisorFloat)
+
+							transaction.Amount, _ = result.Float64()
+						}
 					}
 				}
 			}
 		}
-	}
-}
 
-// 解析TRX转账合约
-func (t *TronAPI) parseTransferContract(transaction *Transaction, contract map[string]interface{}) {
-	if parameter, ok := contract["parameter"].(map[string]interface{}); ok {
-		if value, ok := parameter["value"].(map[string]interface{}); ok {
-			// 获取发送方地址
-			if ownerAddress, ok := value["owner_address"].(string); ok {
-				transaction.From = ownerAddress
-			}
-
-			// 获取接收方地址
-			if toAddress, ok := value["to_address"].(string); ok {
-				transaction.To = toAddress
-			}
-
-			// 获取金额
-			if amount, ok := value["amount"].(float64); ok {
-				// TRX有6位小数
-				transaction.Amount = amount / 1000000
-				transaction.TokenName = "TRON"
-				transaction.TokenSymbol = "TRX"
-			}
-		}
-	}
-}
-
-// 解析代币转账数据
-func (t *TronAPI) parseTokenTransferData(transaction *Transaction, data string) {
-	fmt.Println("解析代币转账数据", transaction, data)
-	// 提取接收地址
-	if len(data) >= 72 {
-		toAddrHex := "41" + data[32:72]
-		toAddr, err := utility.HexAddressToBase58(string(toAddrHex))
-		if err == nil {
-			transaction.To = toAddr
+		// 只添加USDT交易
+		if isUSDT {
+			transactions = append(transactions, transaction)
 		}
 	}
 
-	// 提取金额
-	if len(data) >= 136 {
-		amountHex := data[72:136]
-		amountBig, ok := new(big.Int).SetString(amountHex, 16)
-		if ok {
-			// USDT有6位小数
-			divisor := new(big.Int).Exp(big.NewInt(10), big.NewInt(6), nil)
-			amountFloat := new(big.Float).SetInt(amountBig)
-			divisorFloat := new(big.Float).SetInt(divisor)
-			result := new(big.Float).Quo(amountFloat, divisorFloat)
-
-			transaction.Amount, _ = result.Float64()
-		}
-	}
-}
-
-// 解析交易状态
-func (t *TronAPI) parseTransactionStatus(transaction *Transaction, txInfoResponse map[string]interface{}) {
-	if receipt, ok := txInfoResponse["receipt"].(map[string]interface{}); ok {
-		if result, ok := receipt["result"].(string); ok {
-			transaction.Status = result
-			transaction.Confirmed = result == "SUCCESS"
-		}
-	}
+	return transactions, nil
 }

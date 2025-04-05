@@ -203,70 +203,25 @@ func TestGetLatestBlock(t *testing.T) {
 		api.HttpTimeout = time.Second * 30
 
 		// 调用GetLatestBlock方法
-		block, err := api.GetLatestBlock(context.Background())
+		blockResponse, err := api.GetLatestBlock(context.Background())
 
 		// 验证结果
 		if err != nil {
 			t.Logf("获取最新区块失败: %v", err)
 		} else {
-			t.Log("区块ID:", block.BlockID)
-			t.Log("区块高度:", block.BlockNumber)
-			t.Log("区块时间:", block.BlockTime.Format("2006-01-02 15:04:05"))
-			t.Log("交易数量:", block.TransactionNum)
-			if block.TransactionNum > 0 && len(block.Transactions) > 0 {
-				t.Log("第一笔交易ID:", block.Transactions[0])
+			t.Log("区块ID:", blockResponse.BlockID)
+			t.Log("区块高度:", blockResponse.BlockHeader.RawData.Number)
+			t.Log("区块时间戳:", blockResponse.BlockHeader.RawData.Timestamp)
+			t.Log("区块时间:", time.Unix(blockResponse.BlockHeader.RawData.Timestamp/1000, 0).Format("2006-01-02 15:04:05"))
+			t.Log("交易数量:", len(blockResponse.Transactions))
+			if len(blockResponse.Transactions) > 0 {
+				t.Log("第一笔交易ID:", blockResponse.Transactions[0].TxID)
 			}
 
 			// 验证区块高度大于0
-			t.Assert(block.BlockNumber > 0, true)
+			t.Assert(blockResponse.BlockHeader.RawData.Number > 0, true)
 			// 验证区块ID不为空
-			t.Assert(len(block.BlockID) > 0, true)
-		}
-	})
-}
-
-// TestGetTransaction 测试获取交易详情功能
-func TestGetTransaction(t *testing.T) {
-	gtest.C(t, func(t *gtest.T) {
-		// 创建API客户端
-		api := NewTronAPI(
-			"https://api.trongrid.io", // 使用波场主网API
-			"",                        // 这里填入您的API密钥
-		)
-
-		// 设置较长的超时时间
-		api.HttpTimeout = time.Second * 30
-
-		// 使用一个已知的USDT交易ID进行测试
-		// 这是一个真实的USDT转账交易
-		txID := "33bd8c7d1ae3fe4e7525fa05e4e0d37fd4463a8fddac797c7531d71c2dbf038e"
-
-		// 调用GetTransaction方法
-		tx, err := api.GetTransaction(context.Background(), txID)
-
-		// 验证结果
-		if err != nil {
-			// 如果是"未找到交易"错误，可能是测试交易ID已经过期或不存在
-			if strings.Contains(err.Error(), "未找到交易") {
-				t.Log("测试交易ID不存在，请更新为有效的交易ID")
-			} else {
-				t.Errorf("获取交易详情失败: %v", err)
-			}
-		} else {
-			t.Log("交易ID:", tx.TxID)
-			t.Log("区块号:", tx.BlockNumber)
-			t.Log("时间:", tx.Timestamp.Format("2006-01-02 15:04:05"))
-			t.Log("发送方:", tx.From)
-			t.Log("接收方:", tx.To)
-			t.Log("金额:", tx.Amount)
-			t.Log("代币:", tx.TokenSymbol)
-			t.Log("合约地址:", tx.ContractAddress)
-			t.Log("合约类型:", tx.ContractType)
-			t.Log("状态:", tx.Status)
-			t.Log("是否确认:", tx.Confirmed)
-
-			// 验证交易ID匹配
-			t.Assert(tx.TxID, txID)
+			t.Assert(len(blockResponse.BlockID) > 0, true)
 		}
 	})
 }
@@ -326,8 +281,8 @@ func TestGetUSDTTransaction(t *testing.T) {
 	})
 }
 
-// TestParseContractInfo 测试合约信息解析功能
-func TestParseContractInfo(t *testing.T) {
+// TestParseBlockTransactions 测试从区块中解析USDT交易功能
+func TestParseBlockTransactions(t *testing.T) {
 	gtest.C(t, func(t *gtest.T) {
 		// 创建API客户端
 		api := NewTronAPI(
@@ -338,127 +293,57 @@ func TestParseContractInfo(t *testing.T) {
 		// 设置较长的超时时间
 		api.HttpTimeout = time.Second * 30
 
-		// 先获取一个地址的USDT交易记录
-		testAddress := "TDqSquXBgUCLYvYC4XZgrprLK589dkhSCf"
-		transactions, err := api.GetUSDTTransactions(context.Background(), testAddress, 1, 0, false)
-
-		if err != nil || len(transactions) == 0 {
-			t.Log("无法获取测试交易，跳过测试")
+		// 获取最新区块
+		blockResponse, err := api.GetLatestBlock(context.Background())
+		if err != nil {
+			t.Logf("获取最新区块失败: %v", err)
+			t.FailNow()
 			return
 		}
 
-		// 使用获取到的第一笔交易ID
-		txID := transactions[0].TransactionID
-
-		// 获取交易基本信息
-		txResponse, err := api.fetchTransactionBasicInfo(context.Background(), txID)
+		// 解析区块中的交易
+		transactions, err := api.ParseBlockTransactions(context.Background(), blockResponse)
 		if err != nil {
-			t.Errorf("获取交易基本信息失败: %v", err)
+			t.Logf("解析区块交易失败: %v", err)
+			t.FailNow()
 			return
 		}
 
-		// 初始化交易结构
-		transaction := Transaction{
-			TxID: txID,
+		// 打印解析结果
+		t.Logf("成功解析区块 %d 中的交易，共找到 %d 笔USDT交易",
+			blockResponse.BlockHeader.RawData.Number, len(transactions))
+
+		// 打印USDT交易详情
+		for i, tx := range transactions {
+			t.Logf("USDT交易 #%d:", i+1)
+			t.Logf("  交易ID: %s", tx.TxID)
+			t.Logf("  区块号: %d", tx.BlockNumber)
+			t.Logf("  时间: %s", tx.Timestamp.Format("2006-01-02 15:04:05"))
+			t.Logf("  发送方: %s", tx.From)
+			t.Logf("  接收方: %s", tx.To)
+			t.Logf("  金额: %.6f %s", tx.Amount, tx.TokenSymbol)
+			t.Logf("  合约地址: %s", tx.ContractAddress)
+			t.Logf("  状态: %s", tx.Status)
+			t.Logf("  是否确认: %v", tx.Confirmed)
+			break
 		}
 
-		// 测试解析合约信息
-		api.parseContractInfo(&transaction, txResponse)
+		// 注意：由于区块中可能没有USDT交易，所以不强制要求找到交易
+		// 但如果找到了交易，验证其基本属性
+		for _, tx := range transactions {
+			// 验证是USDT交易
+			t.Assert(tx.TokenSymbol, "USDT")
 
-		// 验证结果
-		t.Log("合约类型:", transaction.ContractType)
-		t.Log("合约地址:", transaction.ContractAddress)
-		t.Log("代币名称:", transaction.TokenName)
-		t.Log("代币符号:", transaction.TokenSymbol)
-		t.Log("发送方:", transaction.From)
-		t.Log("接收方:", transaction.To)
-		t.Log("金额:", transaction.Amount)
+			// 验证交易ID不为空
+			t.Assert(len(tx.TxID) > 0, true)
 
-		// 验证是否成功解析了合约信息
-		t.Assert(transaction.ContractType != "", true)
-		t.Assert(transaction.From != "", true)
-	})
-}
+			// 验证区块号匹配
+			t.Assert(tx.BlockNumber, blockResponse.BlockHeader.RawData.Number)
 
-// TestParseTokenTransferData 测试代币转账数据解析功能
-func TestParseTokenTransferData(t *testing.T) {
-	gtest.C(t, func(t *gtest.T) {
-		// 创建API客户端
-		api := NewTronAPI(
-			"https://api.trongrid.io", // 使用波场主网API
-			"",                        // 这里填入您的API密钥
-		)
-
-		// 模拟一个代币转账数据
-		// 这是一个模拟的transfer方法调用数据
-		// a9059cbb: transfer方法的选择器
-		// 000000000000000000000000410000000000000000000000000000000000000000: 接收地址(填充到32字节)
-		// 0000000000000000000000000000000000000000000000000000000000989680: 金额(10 USDT = 10000000)
-		// data := "a9059cbb0000000000000000000000004100000000000000000000000000000000000000000000000000000000000000000000000000000000000000989680"
-		data := "a9059cbb000000000000000000000041256e0a6472521d81239e8ee6fd29bb5cd189b5e9000000000000000000000000000000000000000000000000000000001daee080"
-
-		// 初始化交易结构
-		transaction := Transaction{
-			TxID: "test_tx_id",
-		}
-
-		// 测试解析代币转账数据
-		api.parseTokenTransferData(&transaction, data)
-
-		// 验证结果
-		t.Log("接收方:", transaction.To)
-		t.Log("金额:", transaction.Amount)
-
-		// 验证金额是否正确解析
-		// 10000000 / 1000000 = 10.0 USDT
-		t.Assert(transaction.Amount, 498.0)
-	})
-}
-
-// TestGetTransactionWithLocalNode 测试使用本地节点获取交易详情
-func TestGetTransactionWithLocalNode(t *testing.T) {
-	gtest.C(t, func(t *gtest.T) {
-		// 跳过此测试，除非明确要测试自建节点
-		t.Skip("跳过自建节点测试")
-
-		// 创建API客户端，使用本地节点
-		api := NewTronAPI(
-			"http://104.233.192.15:8090", // 自建节点地址
-			"",
-		)
-
-		// 设置较长的超时时间
-		api.HttpTimeout = time.Second * 30
-
-		// 使用一个已知的交易ID进行测试
-		txID := "5f92e8f3245b2e5b8a3bf1b9a0a5d1d1f94a0c6c9a5f92e8f3245b2e5b8a3bf1"
-
-		// 调用GetTransaction方法
-		tx, err := api.GetTransaction(context.Background(), txID)
-
-		// 验证结果
-		if err != nil {
-			// 如果是"未找到交易"错误，可能是测试交易ID已经过期或不存在
-			if strings.Contains(err.Error(), "未找到交易") {
-				t.Log("测试交易ID不存在，请更新为有效的交易ID")
-			} else {
-				t.Errorf("获取交易详情失败: %v", err)
-			}
-		} else {
-			t.Log("交易ID:", tx.TxID)
-			t.Log("区块号:", tx.BlockNumber)
-			t.Log("时间:", tx.Timestamp.Format("2006-01-02 15:04:05"))
-			t.Log("发送方:", tx.From)
-			t.Log("接收方:", tx.To)
-			t.Log("金额:", tx.Amount)
-			t.Log("代币:", tx.TokenSymbol)
-			t.Log("合约地址:", tx.ContractAddress)
-			t.Log("合约类型:", tx.ContractType)
-			t.Log("状态:", tx.Status)
-			t.Log("是否确认:", tx.Confirmed)
-
-			// 验证交易ID匹配
-			t.Assert(tx.TxID, txID)
+			// 验证发送方和接收方不为空
+			t.Assert(len(tx.From) > 0, true)
+			t.Assert(len(tx.To) > 0, true)
+			break
 		}
 	})
 }

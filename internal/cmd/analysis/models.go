@@ -1,9 +1,10 @@
 package analysis
 
 import (
-	"encoding/json"
 	"time"
 )
+
+const ContractTypeTriggerSmart = "TriggerSmartContract"
 
 // Block 区块信息
 type Block struct {
@@ -12,6 +13,11 @@ type Block struct {
 	Timestamp      int64     `json:"timestamp"`
 	TransactionNum int       `json:"transaction_num"`
 	Transactions   []string  `json:"transactions"`
+	TxStatuses     []string  `json:"tx_statuses"`
+	WitnessAddress string    `json:"witness_address"`
+	ParentHash     string    `json:"parent_hash"`
+	Version        int       `json:"version"`
+	TxTrieRoot     string    `json:"tx_trie_root"`
 	Confirmed      bool      `json:"confirmed"`
 	BlockTime      time.Time `json:"-"` // 转换后时间
 }
@@ -48,28 +54,34 @@ type BlockResponse struct {
 		} `json:"raw_data"`
 		WitnessSignature string `json:"witness_signature"`
 	} `json:"block_header"`
-	Transactions []struct {
-		Ret []struct {
-			ContractRet string `json:"contractRet"`
-		} `json:"ret"`
-		Signature []string `json:"signature"`
-		TxID      string   `json:"txID"`
-		RawData   struct {
-			Contract []struct {
-				Parameter struct {
-					Value   json.RawMessage `json:"value"`
-					TypeURL string          `json:"type_url"`
-				} `json:"parameter"`
-				Type         string `json:"type"`
-				PermissionID int    `json:"Permission_id,omitempty"`
-			} `json:"contract"`
-			RefBlockBytes string `json:"ref_block_bytes"`
-			RefBlockHash  string `json:"ref_block_hash"`
-			Expiration    int64  `json:"expiration"`
-			Timestamp     int64  `json:"timestamp"`
-		} `json:"raw_data"`
-		RawDataHex string `json:"raw_data_hex"`
-	} `json:"transactions"`
+	Transactions []BlockTransaction `json:"transactions"`
+}
+
+type BlockTransaction struct {
+	Ret []struct {
+		ContractRet string `json:"contractRet"`
+	} `json:"ret"`
+	Signature []string `json:"signature"`
+	TxID      string   `json:"txID"`
+	RawData   struct {
+		Contract []struct {
+			Parameter struct {
+				Value struct {
+					Data            string `json:"data"`
+					OwnerAddress    string `json:"owner_address"`
+					ContractAddress string `json:"contract_address"`
+				} `json:"value"`
+				TypeURL string `json:"type_url"`
+			} `json:"parameter"`
+			Type         string `json:"type"`
+			PermissionID int    `json:"Permission_id,omitempty"`
+		} `json:"contract"`
+		RefBlockBytes string `json:"ref_block_bytes"`
+		RefBlockHash  string `json:"ref_block_hash"`
+		Expiration    int64  `json:"expiration"`
+		Timestamp     int64  `json:"timestamp"`
+	} `json:"raw_data"`
+	RawDataHex string `json:"raw_data_hex"`
 }
 
 // TokenInfo 代币信息
@@ -166,26 +178,6 @@ type APIErrorResponse struct {
 	StatusCode int    `json:"StatusCode"`
 }
 
-// TransactionResponse 表示交易详情API响应
-type TransactionResponse struct {
-	Visible bool   `json:"visible"`
-	TxID    string `json:"txID"`
-	RawData struct {
-		Contract []struct {
-			Parameter struct {
-				Value   json.RawMessage `json:"value"`
-				TypeURL string          `json:"type_url"`
-			} `json:"parameter"`
-			Type string `json:"type"`
-		} `json:"contract"`
-		RefBlockBytes string `json:"ref_block_bytes"`
-		RefBlockHash  string `json:"ref_block_hash"`
-		Expiration    int64  `json:"expiration"`
-		Timestamp     int64  `json:"timestamp"`
-	} `json:"raw_data"`
-	RawDataHex string `json:"raw_data_hex"`
-}
-
 // TransactionInfoResponse 表示交易信息API响应
 type TransactionInfoResponse struct {
 	ID              string   `json:"id"`
@@ -208,18 +200,4 @@ type TransactionInfoResponse struct {
 		Data    string   `json:"data"`
 	} `json:"log,omitempty"`
 	Fee int64 `json:"fee"`
-}
-
-// TriggerSmartContractParam 表示智能合约调用参数
-type TriggerSmartContractParam struct {
-	OwnerAddress    string `json:"owner_address"`
-	ContractAddress string `json:"contract_address"`
-	Data            string `json:"data"`
-}
-
-// TransferContractParam 表示TRX转账参数
-type TransferContractParam struct {
-	OwnerAddress string `json:"owner_address"`
-	ToAddress    string `json:"to_address"`
-	Amount       int64  `json:"amount"`
 }

@@ -157,66 +157,52 @@ func (m *ActiveMonitor) AnalyzeRecentTransactions(ctx context.Context) {
 // 获取最新区块的USDT交易
 func (m *ActiveMonitor) getRecentBlockUSDTTransactions(ctx context.Context) ([]ActiveTransaction, error) {
 	// 获取最新区块
-	latestBlock, err := m.tronAPI.GetLatestBlock(ctx)
+	blockResponse, err := m.tronAPI.GetLatestBlock(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("获取最新区块失败: %v", err)
 	}
 
-	g.Log().Infof(ctx, "获取到最新区块: %d, 包含 %d 笔交易", latestBlock.BlockNumber, len(latestBlock.Transactions))
+	// 从BlockResponse中提取区块号
+	blockNumber := blockResponse.BlockHeader.RawData.Number
+	g.Log().Infof(ctx, "获取到最新区块: %d, 包含 %d 笔交易", blockNumber, len(blockResponse.Transactions))
 
-	// 获取区块中的交易详情
-	var transactions []ActiveTransaction
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-	semaphore := make(chan struct{}, m.concurrency)
-
-	for _, txID := range latestBlock.Transactions {
-		wg.Add(1)
-		semaphore <- struct{}{}
-
-		go func(txID string) {
-			defer wg.Done()
-			defer func() { <-semaphore }()
-
-			// 使用已实现的GetTransaction方法获取交易详情
-			tx, err := m.tronAPI.GetTransaction(ctx, txID)
-			if err != nil {
-				g.Log().Warningf(ctx, "获取交易 %s 详情失败: %v", txID, err)
-				return
-			}
-
-			// 过滤非USDT交易
-			if tx.ContractAddress != m.usdtContract {
-				return
-			}
-
-			// 过滤金额不在1000-5000之间的交易
-			if tx.Amount < 1000 || tx.Amount > 5000 {
-				return
-			}
-
-			// 转换为活跃度分析用交易格式
-			activeTx := ActiveTransaction{
-				TxID:           tx.TxID,
-				BlockNum:       tx.BlockNumber,
-				Timestamp:      time.Unix(tx.BlockTimestamp/1000, 0),
-				FromAddress:    tx.From,
-				ToAddress:      tx.To,
-				Amount:         tx.Amount,
-				TokenType:      tx.TokenName,
-				ContractAddr:   tx.ContractAddress,
-				Confirmed:      tx.Confirmed,
-				TransactionFee: tx.Fee,
-			}
-
-			mu.Lock()
-			transactions = append(transactions, activeTx)
-			mu.Unlock()
-		}(txID)
+	// 解析区块中的交易
+	transactions, err := m.tronAPI.ParseBlockTransactions(ctx, blockResponse)
+	if err != nil {
+		return nil, fmt.Errorf("解析区块交易失败: %v", err)
 	}
 
-	wg.Wait()
-	return transactions, nil
+	// 过滤USDT交易并转换为ActiveTransaction
+	var activeTransactions []ActiveTransaction
+	for _, tx := range transactions {
+		// 过滤非USDT交易
+		if tx.ContractAddress != m.usdtContract && tx.TokenSymbol != "USDT" {
+			continue
+		}
+
+		// 过滤金额不在1000-5000之间的交易
+		if tx.Amount < 1000 || tx.Amount > 5000 {
+			continue
+		}
+
+		// 转换为活跃度分析用交易格式
+		activeTx := ActiveTransaction{
+			TxID:           tx.TxID,
+			BlockNum:       tx.BlockNumber,
+			Timestamp:      tx.Timestamp,
+			FromAddress:    tx.From,
+			ToAddress:      tx.To,
+			Amount:         tx.Amount,
+			TokenType:      tx.TokenSymbol,
+			ContractAddr:   tx.ContractAddress,
+			Confirmed:      tx.Confirmed,
+			TransactionFee: tx.Fee,
+		}
+
+		activeTransactions = append(activeTransactions, activeTx)
+	}
+
+	return activeTransactions, nil
 }
 
 // 获取地址的最近USDT交易
@@ -287,9 +273,13 @@ func (m *ActiveMonitor) analyzeActiveAddressesRecursively(ctx context.Context, a
 
 	g.Log().Infof(ctx, "开始第 %d 层递归分析，地址数量: %d", depth, len(addresses))
 
-	// 根据递归深度调整筛选条件
-	minBalance, maxBalance := m.getBalanceThresholdByDepth(depth)
-	minTxCount, maxTxCount := m.getTxCountThresholdByDepth(depth)
+	// 根据递归深度调整筛选条件 todo
+	//minBalance, maxBalance := m.getBalanceThresholdByDepth(depth)
+	//minTxCount, maxTxCount := m.getTxCountThresholdByDepth(depth)
+	minBalance := 5000.0
+	maxBalance := 50000.0
+	minTxCount := 20
+	maxTxCount := 20000
 
 	var activeAddresses []ActiveAddress
 	var nextLevelAddresses []string
