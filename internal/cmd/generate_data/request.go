@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/gogf/gf/v2/frame/g"
+
+	"tron-lion/utility"
 )
 
 // 根据波场地址查询相关交易地址
@@ -120,7 +122,7 @@ func fetchAddresses(ctx context.Context, address string) ([]string, error) {
 	for addr := range addressMap {
 		// 十六进制转Base58
 		if strings.HasPrefix(addr, "41") {
-			base58Addr, err := hexAddressToBase58(addr)
+			base58Addr, err := utility.HexAddressToBase58(addr)
 			if err == nil {
 				addresses = append(addresses, base58Addr)
 			} else {

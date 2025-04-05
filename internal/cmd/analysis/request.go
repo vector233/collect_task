@@ -2,8 +2,6 @@ package analysis
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,8 +13,9 @@ import (
 	"time"
 
 	"github.com/gogf/gf/v2/frame/g"
-	"github.com/shengdoushi/base58"
 	"golang.org/x/time/rate"
+
+	"tron-lion/utility"
 )
 
 // TronAPI 波场API封装
@@ -152,13 +151,13 @@ func (t *TronAPI) GetTransactionCount(ctx context.Context, address, tokenContrac
 // 获取代币余额
 func (t *TronAPI) GetTokenBalance(ctx context.Context, address, tokenContract string) (float64, error) {
 	// 将Base58地址转换为十六进制地址
-	hexAddress, err := base58ToHexAddress(address)
+	hexAddress, err := utility.Base58ToHexAddress(address)
 	if err != nil {
 		return 0, fmt.Errorf("地址转换失败: %v", err)
 	}
 
 	// 将合约地址转换为十六进制
-	hexContractAddress, err := base58ToHexAddress(tokenContract)
+	hexContractAddress, err := utility.Base58ToHexAddress(tokenContract)
 	if err != nil {
 		return 0, fmt.Errorf("合约地址转换失败: %v", err)
 	}
@@ -245,41 +244,6 @@ func (t *TronAPI) GetTokenBalance(ctx context.Context, address, tokenContract st
 
 	finalBalance, _ := result.Float64()
 	return finalBalance, nil
-}
-
-// base58ToHexAddress 将Base58格式的波场地址转换为十六进制格式
-func base58ToHexAddress(base58Address string) (string, error) {
-	// 解码
-	decoded, err := base58.Decode(base58Address, base58.BitcoinAlphabet)
-	if err != nil {
-		return "", fmt.Errorf("Base58解码失败: %v", err)
-	}
-
-	// 长度检查
-	if len(decoded) < 4 {
-		return "", fmt.Errorf("解码后的地址长度不正确")
-	}
-
-	// 分离地址和校验和
-	addressBytes := decoded[:len(decoded)-4]
-	checksumBytes := decoded[len(decoded)-4:]
-
-	// 校验和验证
-	firstSHA := sha256.Sum256(addressBytes)
-	secondSHA := sha256.Sum256(firstSHA[:])
-	expectedChecksum := secondSHA[:4]
-
-	// 比较校验和
-	for i := 0; i < 4; i++ {
-		if checksumBytes[i] != expectedChecksum[i] {
-			return "", fmt.Errorf("校验和不匹配，地址可能无效")
-		}
-	}
-
-	// 转hex
-	hexAddress := hex.EncodeToString(addressBytes)
-
-	return hexAddress, nil
 }
 
 // GetUSDTTransactions 获取地址的USDT交易记录

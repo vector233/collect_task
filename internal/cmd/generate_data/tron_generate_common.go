@@ -2,16 +2,13 @@ package generate_data
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"fmt"
 	"math/rand"
 	"strings"
 	"sync"
 
 	"github.com/gogf/gf/v2/frame/g"
-	"github.com/shengdoushi/base58"
 )
 
 // 处理函数类型
@@ -163,21 +160,4 @@ func genFromAddressPart(ctx context.Context) string {
 	suffixStr := generateRandomString(suffix)
 
 	return prefixStr + "*" + suffixStr
-}
-
-// 十六进制地址转Base58
-func hexAddressToBase58(hexAddress string) (string, error) {
-	addressBytes, err := hex.DecodeString(hexAddress)
-	if err != nil {
-		return "", fmt.Errorf("解码地址失败: %v", err)
-	}
-
-	firstSHA := sha256.Sum256(addressBytes)
-	secondSHA := sha256.Sum256(firstSHA[:])
-	checksum := secondSHA[:4]
-
-	addressWithChecksum := append(addressBytes, checksum...)
-	base58Address := base58.Encode(addressWithChecksum, base58.BitcoinAlphabet)
-
-	return base58Address, nil
 }
