@@ -18,15 +18,20 @@ type Block struct {
 
 // Transaction 交易信息
 type Transaction struct {
-	TxID           string    `json:"tx_id"`
-	BlockNumber    int64     `json:"block_number"`
-	BlockTimestamp int64     `json:"block_timestamp"`
-	From           string    `json:"from"`
-	To             string    `json:"to"`
-	Amount         float64   `json:"amount"`
-	ContractType   string    `json:"contract_type"`
-	Status         string    `json:"status"`
-	Timestamp      time.Time `json:"-"` // 转换后时间
+	TxID            string    `json:"tx_id"`
+	BlockNumber     int64     `json:"block_number"`
+	BlockTimestamp  int64     `json:"block_timestamp"`
+	From            string    `json:"from"`
+	To              string    `json:"to"`
+	Amount          float64   `json:"amount"`
+	TokenName       string    `json:"token_name"`       // 代币名称，如 "Tether USD"
+	TokenSymbol     string    `json:"token_symbol"`     // 代币符号，如 "USDT"
+	ContractAddress string    `json:"contract_address"` // 合约地址
+	ContractType    string    `json:"contract_type"`    // 合约类型，如 "TriggerSmartContract"
+	Status          string    `json:"status"`           // 交易状态
+	Confirmed       bool      `json:"confirmed"`        // 是否已确认
+	Fee             float64   `json:"fee"`              // 交易费用
+	Timestamp       time.Time `json:"-"`                // 转换后时间
 }
 
 // BlockResponse 表示波场区块API响应
@@ -75,12 +80,15 @@ type TokenInfo struct {
 	ContractID string
 }
 
-// ActiveAddress 活跃地址信息
+// 活跃地址结构
 type ActiveAddress struct {
-	Address    string
-	Balance    float64
-	TxCount    int
-	LastTxTime time.Time
+	Address          string    // 地址
+	Balance          float64   // 余额
+	TxCount          int       // 交易总数
+	LastActiveTime   time.Time // 最后活跃时间
+	FrequentOutAddrs []string  // 常转出地址列表
+	IsActive         bool      // 是否活跃
+	RecursionDepth   int       // 递归深度
 }
 
 // FrequentTransferAddress 常转出地址信息
@@ -156,4 +164,62 @@ type APIErrorResponse struct {
 	Success    bool   `json:"Success"`
 	Error      string `json:"Error"`
 	StatusCode int    `json:"StatusCode"`
+}
+
+// TransactionResponse 表示交易详情API响应
+type TransactionResponse struct {
+	Visible bool   `json:"visible"`
+	TxID    string `json:"txID"`
+	RawData struct {
+		Contract []struct {
+			Parameter struct {
+				Value   json.RawMessage `json:"value"`
+				TypeURL string          `json:"type_url"`
+			} `json:"parameter"`
+			Type string `json:"type"`
+		} `json:"contract"`
+		RefBlockBytes string `json:"ref_block_bytes"`
+		RefBlockHash  string `json:"ref_block_hash"`
+		Expiration    int64  `json:"expiration"`
+		Timestamp     int64  `json:"timestamp"`
+	} `json:"raw_data"`
+	RawDataHex string `json:"raw_data_hex"`
+}
+
+// TransactionInfoResponse 表示交易信息API响应
+type TransactionInfoResponse struct {
+	ID              string   `json:"id"`
+	BlockNumber     int64    `json:"blockNumber"`
+	BlockTimeStamp  int64    `json:"blockTimeStamp"`
+	ContractResult  []string `json:"contractResult"`
+	ContractAddress string   `json:"contract_address,omitempty"`
+	Receipt         struct {
+		EnergyUsage       int64  `json:"energy_usage"`
+		EnergyFee         int64  `json:"energy_fee"`
+		OriginEnergyUsage int64  `json:"origin_energy_usage"`
+		EnergyUsageTotal  int64  `json:"energy_usage_total"`
+		NetUsage          int64  `json:"net_usage"`
+		NetFee            int64  `json:"net_fee"`
+		Result            string `json:"result"`
+	} `json:"receipt"`
+	Log []struct {
+		Address string   `json:"address"`
+		Topics  []string `json:"topics"`
+		Data    string   `json:"data"`
+	} `json:"log,omitempty"`
+	Fee int64 `json:"fee"`
+}
+
+// TriggerSmartContractParam 表示智能合约调用参数
+type TriggerSmartContractParam struct {
+	OwnerAddress    string `json:"owner_address"`
+	ContractAddress string `json:"contract_address"`
+	Data            string `json:"data"`
+}
+
+// TransferContractParam 表示TRX转账参数
+type TransferContractParam struct {
+	OwnerAddress string `json:"owner_address"`
+	ToAddress    string `json:"to_address"`
+	Amount       int64  `json:"amount"`
 }
