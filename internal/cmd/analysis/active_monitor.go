@@ -118,7 +118,7 @@ func (m *ActiveMonitor) getRecentBlockUSDTTransactions(ctx context.Context) ([]A
 	g.Log().Infof(ctx, "获取到最新区块: %d, 包含 %d 笔交易", blockNumber, len(blockResponse.Transactions))
 
 	// 解析区块中的交易
-	transactions, err := m.tronAPI.ParseBlockTransactions(ctx, blockResponse)
+	transactions, err := ParseBlockTransactions(ctx, blockResponse)
 	if err != nil {
 		return nil, fmt.Errorf("解析区块交易失败: %v", err)
 	}
