@@ -247,23 +247,68 @@ func (t *TronAPI) GetTokenBalance(ctx context.Context, address, tokenContract st
 }
 
 // GetUSDTTransactions 获取地址的USDT交易记录
-func (t *TronAPI) GetUSDTTransactions(ctx context.Context, address string, limit int, startTimestamp int64, onlyIncoming bool) ([]TRC20Transaction, error) {
+func (t *TronAPI) GetUSDTTransactions(ctx context.Context, address string, params TRC20TransactionParams) ([]TRC20Transaction, error) {
 	// 构造URL
 	url := fmt.Sprintf("%s/v1/accounts/%s/transactions/trc20", t.BaseURL, address)
 
 	// 查询参数
 	query := make(map[string]string)
-	query["limit"] = fmt.Sprintf("%d", limit)
-	if startTimestamp > 0 {
-		query["min_timestamp"] = fmt.Sprintf("%d", startTimestamp)
+
+	// 设置限制数量
+	if params.Limit <= 0 {
+		params.Limit = 20 // 默认值
+	} else if params.Limit > 200 {
+		params.Limit = 200 // 最大值
+	}
+	query["limit"] = fmt.Sprintf("%d", params.Limit)
+
+	// 设置指纹
+	if params.Fingerprint != "" {
+		query["fingerprint"] = params.Fingerprint
 	}
 
-	// USDT合约地址
-	query["contract_address"] = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
+	// 设置排序方式
+	if params.OrderBy != "" {
+		query["order_by"] = params.OrderBy
+	}
 
-	// 只查转入
-	if onlyIncoming {
+	// 设置最小时间戳
+	if params.MinTimestamp != nil {
+		minTimestamp := params.MinTimestamp.UnixNano() / int64(time.Millisecond)
+		query["min_timestamp"] = fmt.Sprintf("%d", minTimestamp)
+	}
+
+	// 设置最大时间戳
+	if params.MaxTimestamp != nil {
+		maxTimestamp := params.MaxTimestamp.UnixNano() / int64(time.Millisecond)
+		query["max_timestamp"] = fmt.Sprintf("%d", maxTimestamp)
+	}
+
+	// 设置合约地址，默认为USDT
+	if params.ContractAddress != "" {
+		query["contract_address"] = params.ContractAddress
+	} else {
+		query["contract_address"] = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" // 波场USDT合约地址
+	}
+
+	// 设置只查询已确认交易
+	if params.OnlyConfirmed != nil && *params.OnlyConfirmed {
+		query["only_confirmed"] = "true"
+	}
+
+	// 设置只查询未确认交易
+	if params.OnlyUnconfirmed != nil && *params.OnlyUnconfirmed {
+		query["only_unconfirmed"] = "true"
+	}
+
+	// 设置只查询转入交易
+	if params.OnlyTo != nil && *params.OnlyTo {
 		query["only_to"] = "true"
+	}
+
+	// 设置只查询转出交易
+	if params.OnlyFrom != nil && *params.OnlyFrom {
+		query["only_from"] = "true"
 	}
 
 	// 创建请求
@@ -343,7 +388,6 @@ func (t *TronAPI) GetUSDTTransactions(ctx context.Context, address string, limit
 			TokenSymbol:    tx.TokenInfo.Symbol,
 			TokenDecimals:  tx.TokenInfo.Decimals,
 			Status:         tx.Status,
-			Confirmed:      tx.Approved,
 			Timestamp:      timestamp,
 		})
 	}
@@ -353,55 +397,46 @@ func (t *TronAPI) GetUSDTTransactions(ctx context.Context, address string, limit
 
 // GetIncomingUSDTTransactions 获取地址的USDT转入交易记录
 func (t *TronAPI) GetIncomingUSDTTransactions(ctx context.Context, address string, limit int, startTimestamp int64) ([]TRC20Transaction, error) {
-	return t.GetUSDTTransactions(ctx, address, limit, startTimestamp, true)
+	// 创建参数
+	onlyTo := true
+	params := TRC20TransactionParams{
+		Limit:  limit,
+		OnlyTo: &onlyTo,
+	}
+
+	// 设置最小时间戳
+	if startTimestamp > 0 {
+		minTime := time.Unix(startTimestamp/1000, 0)
+		params.MinTimestamp = &minTime
+	}
+
+	return t.GetUSDTTransactions(ctx, address, params)
 }
 
 // GetIncomingUSDTTransactionsByTimeRange 根据时间范围获取USDT转入交易记录
 func (t *TronAPI) GetIncomingUSDTTransactionsByTimeRange(ctx context.Context, address string, startTime, endTime time.Time, limit int) ([]TRC20Transaction, error) {
-	// 转毫秒时间戳
-	startTimestamp := startTime.UnixNano() / int64(time.Millisecond)
-
-	// 获取转入交易记录
-	transactions, err := t.GetUSDTTransactions(ctx, address, limit, startTimestamp, true)
-	if err != nil {
-		return nil, err
+	// 创建参数
+	onlyTo := true
+	params := TRC20TransactionParams{
+		Limit:        limit,
+		OnlyTo:       &onlyTo,
+		MinTimestamp: &startTime,
+		MaxTimestamp: &endTime,
 	}
 
-	// 过滤结束时间之后的交易
-	endTimestamp := endTime.UnixNano() / int64(time.Millisecond)
-	var filteredTransactions []TRC20Transaction
-
-	for _, tx := range transactions {
-		if tx.BlockTimestamp <= endTimestamp {
-			filteredTransactions = append(filteredTransactions, tx)
-		}
-	}
-
-	return filteredTransactions, nil
+	return t.GetUSDTTransactions(ctx, address, params)
 }
 
 // GetUSDTTransactionsByTimeRange 根据时间范围获取USDT交易记录
 func (t *TronAPI) GetUSDTTransactionsByTimeRange(ctx context.Context, address string, startTime, endTime time.Time, limit int) ([]TRC20Transaction, error) {
-	// 转毫秒时间戳
-	startTimestamp := startTime.UnixNano() / int64(time.Millisecond)
-
-	// 获取记录
-	transactions, err := t.GetUSDTTransactions(ctx, address, limit, startTimestamp, false)
-	if err != nil {
-		return nil, err
+	// 创建参数
+	params := TRC20TransactionParams{
+		Limit:        limit,
+		MinTimestamp: &startTime,
+		MaxTimestamp: &endTime,
 	}
 
-	// 过滤结束时间之后的交易
-	endTimestamp := endTime.UnixNano() / int64(time.Millisecond)
-	var filteredTransactions []TRC20Transaction
-
-	for _, tx := range transactions {
-		if tx.BlockTimestamp <= endTimestamp {
-			filteredTransactions = append(filteredTransactions, tx)
-		}
-	}
-
-	return filteredTransactions, nil
+	return t.GetUSDTTransactions(ctx, address, params)
 }
 
 // GetLatestBlock 获取波场最新区块

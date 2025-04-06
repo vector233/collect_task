@@ -27,41 +27,6 @@ type ActiveMonitor struct {
 	debugMode         bool // 调试模式
 }
 
-// ActiveTransaction 活跃度分析用交易记录结构
-type ActiveTransaction struct {
-	TxID           string    // 交易ID
-	BlockNum       int64     // 区块号
-	Timestamp      time.Time // 交易时间
-	FromAddress    string    // 转出地址
-	ToAddress      string    // 转入地址
-	Amount         float64   // 交易金额
-	TokenType      string    // 代币类型
-	ContractAddr   string    // 合约地址
-	Confirmed      bool      // 是否确认
-	TransactionFee float64   // 交易费用
-}
-
-// 常转出地址结构
-type FrequentOutAddress struct {
-	Address        string    // 地址
-	MaskedAddress  string    // 掩码后地址
-	OutCount       int       // 转出次数
-	TotalOutAmount float64   // 总转出金额
-	AvgOutAmount   float64   // 平均转出金额
-	LastTxTime     time.Time // 最后交易时间
-	LargeOutCount  int       // 大额转出次数(>10000)
-}
-
-// 订单结构
-type Order struct {
-	OrderID         string    // 订单号
-	ActiveAddress   string    // 活跃地址
-	FrequentOutAddr string    // 常转出地址(掩码后)
-	LastTxTime      time.Time // 最近交易时间
-	FixedAmount     float64   // 固定金额
-	RecursionDepth  int       // 递归深度
-}
-
 // 创建活跃度监控器
 func NewActiveMonitor(tronAPI *TronAPI, usdtContract string) *ActiveMonitor {
 	return &ActiveMonitor{
@@ -195,7 +160,6 @@ func (m *ActiveMonitor) getRecentBlockUSDTTransactions(ctx context.Context) ([]A
 			Amount:         tx.Amount,
 			TokenType:      tx.TokenSymbol,
 			ContractAddr:   tx.ContractAddress,
-			Confirmed:      tx.Confirmed,
 			TransactionFee: tx.Fee,
 		}
 
@@ -235,8 +199,7 @@ func (m *ActiveMonitor) getRecentUSDTTransactions(ctx context.Context, address s
 			Amount:         tx.Amount,
 			TokenType:      tx.TokenSymbol,
 			ContractAddr:   m.usdtContract, // 使用配置的USDT合约地址
-			Confirmed:      tx.Confirmed,
-			TransactionFee: 0, // TRC20Transaction中没有交易费用
+			TransactionFee: 0,              // TRC20Transaction中没有交易费用
 		}
 
 		transactions = append(transactions, activeTx)
