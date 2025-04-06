@@ -213,10 +213,6 @@ func (m *ActiveMonitor) analyzeActiveAddressesRecursively(ctx context.Context, a
 	// 根据递归深度调整筛选条件 todo
 	//minBalance, maxBalance := m.getBalanceThresholdByDepth(depth)
 	//minTxCount, maxTxCount := m.getTxCountThresholdByDepth(depth)
-	minBalance := 5000.0
-	maxBalance := 50000.0
-	minTxCount := 20
-	maxTxCount := 20000
 
 	var activeAddresses []ActiveAddress
 	var nextLevelAddresses []string
@@ -235,7 +231,7 @@ func (m *ActiveMonitor) analyzeActiveAddressesRecursively(ctx context.Context, a
 			defer func() { <-semaphore }()
 
 			// 分析单个地址
-			activeAddr, newAddresses := m.analyzeAddress(ctx, address, depth, minBalance, maxBalance, minTxCount, maxTxCount)
+			activeAddr, newAddresses := m.analyzeAddress(ctx, address, depth)
 
 			if activeAddr.IsActive {
 				mu.Lock()
@@ -282,11 +278,15 @@ func (m *ActiveMonitor) getTxCountThresholdByDepth(depth int) (int, int) {
 }
 
 // 分析单个地址
-func (m *ActiveMonitor) analyzeAddress(ctx context.Context, address string, depth int, minBalance, maxBalance float64, minTxCount, maxTxCount int) (ActiveAddress, []string) {
+func (m *ActiveMonitor) analyzeAddress(ctx context.Context, address string, depth int) (ActiveAddress, []string) {
 	activeAddr := ActiveAddress{
 		Address:        address,
 		RecursionDepth: depth,
 	}
+	minBalance := 5000.0
+	maxBalance := 50000.0
+	minTxCount := 20
+	maxTxCount := 20000
 
 	// 获取地址余额
 	balance, err := m.tronAPI.GetTokenBalance(ctx, address, m.usdtContract)
