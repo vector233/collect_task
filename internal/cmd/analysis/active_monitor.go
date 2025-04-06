@@ -18,70 +18,56 @@ type ActiveMonitor struct {
 	tronAPI           *TronAPI
 	usdtContract      string
 	ctx               context.Context
-	concurrency       int  // 并发数
-	lookbackDays      int  // 交易回溯天数
-	maxRecursionDepth int  // 最大递归深度
-	prefixMaskLen     int  // 地址前缀掩码长度
-	suffixMaskLen     int  // 地址后缀掩码长度
-	batchSize         int  // 批处理大小
-	debugMode         bool // 调试模式
+	concurrency       int     // 并发数
+	lookbackDays      int     // 交易回溯天数
+	maxRecursionDepth int     // 最大递归深度
+	prefixMaskLen     int     // 地址前缀掩码长度
+	suffixMaskLen     int     // 地址后缀掩码长度
+	batchSize         int     // 批处理大小
+	debugMode         bool    // 调试模式
+	minTxAmount       float64 // 最小交易金额
+	maxTxAmount       float64 // 最大交易金额
 }
 
 // 创建活跃度监控器
-func NewActiveMonitor(tronAPI *TronAPI, usdtContract string) *ActiveMonitor {
-	return &ActiveMonitor{
+func NewActiveMonitor(ctx context.Context, tronAPI *TronAPI, usdtContract string) *ActiveMonitor {
+	// 从配置文件读取所有参数
+	concurrency := g.Cfg().MustGet(ctx, "tron.active.concurrency", 200).Int()
+	lookbackDays := g.Cfg().MustGet(ctx, "tron.active.lookbackDays", 30).Int()
+	maxRecursionDepth := g.Cfg().MustGet(ctx, "tron.active.maxRecursionDepth", 100).Int()
+	prefixMaskLen := g.Cfg().MustGet(ctx, "tron.active.prefixMaskLen", 3).Int()
+	suffixMaskLen := g.Cfg().MustGet(ctx, "tron.active.suffixMaskLen", 4).Int()
+	batchSize := g.Cfg().MustGet(ctx, "tron.active.batchSize", 100).Int()
+	debugMode := g.Cfg().MustGet(ctx, "tron.active.debugMode", false).Bool()
+	minTxAmount := g.Cfg().MustGet(ctx, "tron.active.minTxAmount", 1000.0).Float64()
+	maxTxAmount := g.Cfg().MustGet(ctx, "tron.active.maxTxAmount", 5000.0).Float64()
+
+	monitor := &ActiveMonitor{
 		tronAPI:           tronAPI,
 		usdtContract:      usdtContract,
 		ctx:               gctx.New(),
-		concurrency:       50,    // 默认并发数
-		lookbackDays:      30,    // 默认回溯30天
-		maxRecursionDepth: 100,   // 最大递归深度
-		prefixMaskLen:     3,     // 默认前3位
-		suffixMaskLen:     4,     // 默认后4位
-		batchSize:         100,   // 批处理大小
-		debugMode:         false, // 默认关闭调试
+		concurrency:       concurrency,       // 并发数
+		lookbackDays:      lookbackDays,      // 交易回溯天数
+		maxRecursionDepth: maxRecursionDepth, // 最大递归深度
+		prefixMaskLen:     prefixMaskLen,     // 地址前缀掩码长度
+		suffixMaskLen:     suffixMaskLen,     // 地址后缀掩码长度
+		batchSize:         batchSize,         // 批处理大小
+		debugMode:         debugMode,         // 调试模式
+		minTxAmount:       minTxAmount,       // 最小交易金额
+		maxTxAmount:       maxTxAmount,       // 最大交易金额
 	}
-}
 
-// 设置并发数
-func (m *ActiveMonitor) SetConcurrency(concurrency int) {
-	if concurrency > 0 {
-		m.concurrency = concurrency
-	}
-	g.Log().Infof(m.ctx, "活跃度监控器配置更新: 并发数=%d", m.concurrency)
-}
+	// 记录初始配置信息
+	g.Log().Infof(monitor.ctx, "活跃度监控器初始化: 并发数=%d", monitor.concurrency)
+	g.Log().Infof(monitor.ctx, "活跃度监控器初始化: 回溯天数=%d", monitor.lookbackDays)
+	g.Log().Infof(monitor.ctx, "活跃度监控器初始化: 最大递归深度=%d", monitor.maxRecursionDepth)
+	g.Log().Infof(monitor.ctx, "活跃度监控器初始化: 地址掩码长度=前%d后%d", monitor.prefixMaskLen, monitor.suffixMaskLen)
+	g.Log().Infof(monitor.ctx, "活跃度监控器初始化: 批处理大小=%d", monitor.batchSize)
+	g.Log().Infof(monitor.ctx, "活跃度监控器初始化: 调试模式=%v", monitor.debugMode)
+	g.Log().Infof(monitor.ctx, "活跃度监控器初始化: USDT合约地址=%s", monitor.usdtContract)
+	g.Log().Infof(monitor.ctx, "活跃度监控器初始化: 交易金额范围=%.2f-%.2f", monitor.minTxAmount, monitor.maxTxAmount)
 
-// 设置回溯天数
-func (m *ActiveMonitor) SetLookbackDays(days int) {
-	if days > 0 {
-		m.lookbackDays = days
-	}
-	g.Log().Infof(m.ctx, "活跃度监控器配置更新: 回溯天数=%d", m.lookbackDays)
-}
-
-// 设置最大递归深度
-func (m *ActiveMonitor) SetMaxRecursionDepth(depth int) {
-	if depth > 0 {
-		m.maxRecursionDepth = depth
-	}
-	g.Log().Infof(m.ctx, "活跃度监控器配置更新: 最大递归深度=%d", m.maxRecursionDepth)
-}
-
-// 设置地址掩码长度
-func (m *ActiveMonitor) SetAddressMaskLength(prefix, suffix int) {
-	if prefix > 0 {
-		m.prefixMaskLen = prefix
-	}
-	if suffix > 0 {
-		m.suffixMaskLen = suffix
-	}
-	g.Log().Infof(m.ctx, "活跃度监控器配置更新: 地址掩码长度=前%d后%d", m.prefixMaskLen, m.suffixMaskLen)
-}
-
-// 设置调试模式
-func (m *ActiveMonitor) SetDebugMode(debug bool) {
-	m.debugMode = debug
-	g.Log().Infof(m.ctx, "活跃度监控器配置更新: 调试模式=%v", m.debugMode)
+	return monitor
 }
 
 // 启动定时监控
@@ -146,7 +132,7 @@ func (m *ActiveMonitor) getRecentBlockUSDTTransactions(ctx context.Context) ([]A
 		}
 
 		// 过滤金额不在1000-5000之间的交易
-		if tx.Amount < 1000 || tx.Amount > 5000 {
+		if tx.Amount < m.minTxAmount || tx.Amount > m.maxTxAmount {
 			continue
 		}
 
@@ -185,7 +171,7 @@ func (m *ActiveMonitor) getRecentUSDTTransactions(ctx context.Context, address s
 	var transactions []ActiveTransaction
 	for _, tx := range trc20Txs {
 		// 过滤金额不在1000-5000之间的交易
-		if tx.Amount < 1000 || tx.Amount > 5000 {
+		if tx.Amount < m.minTxAmount || tx.Amount > m.maxTxAmount {
 			continue
 		}
 
