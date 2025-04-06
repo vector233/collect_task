@@ -218,19 +218,6 @@ type TransactionInfoResponse struct {
 	Fee int64 `json:"fee"`
 }
 
-// ActiveTransaction 活跃度分析用交易记录结构
-type ActiveTransaction struct {
-	TxID           string    // 交易ID
-	BlockNum       int64     // 区块号
-	Timestamp      time.Time // 交易时间
-	FromAddress    string    // 转出地址
-	ToAddress      string    // 转入地址
-	Amount         float64   // 交易金额
-	TokenType      string    // 代币类型
-	ContractAddr   string    // 合约地址
-	TransactionFee float64   // 交易费用
-}
-
 // 常转出地址结构
 type FrequentOutAddress struct {
 	Address        string    // 地址

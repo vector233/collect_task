@@ -106,7 +106,7 @@ func (m *ActiveMonitor) AnalyzeRecentTransactions(ctx context.Context) {
 }
 
 // 获取最新区块的USDT交易
-func (m *ActiveMonitor) getRecentBlockUSDTTransactions(ctx context.Context) ([]ActiveTransaction, error) {
+func (m *ActiveMonitor) getRecentBlockUSDTTransactions(ctx context.Context) ([]Transaction, error) {
 	// 获取最新区块
 	blockResponse, err := m.tronAPI.GetLatestBlock(ctx)
 	if err != nil {
@@ -123,8 +123,8 @@ func (m *ActiveMonitor) getRecentBlockUSDTTransactions(ctx context.Context) ([]A
 		return nil, fmt.Errorf("解析区块交易失败: %v", err)
 	}
 
-	// 过滤USDT交易并转换为ActiveTransaction
-	var activeTransactions []ActiveTransaction
+	// 过滤USDT交易ActiveTransaction
+	var activeTransactions []Transaction
 	for _, tx := range transactions {
 		// 过滤非USDT交易
 		if tx.ContractAddress != m.usdtContract && tx.TokenSymbol != "USDT" {
@@ -136,27 +136,14 @@ func (m *ActiveMonitor) getRecentBlockUSDTTransactions(ctx context.Context) ([]A
 			continue
 		}
 
-		// 转换为活跃度分析用交易格式
-		activeTx := ActiveTransaction{
-			TxID:           tx.TxID,
-			BlockNum:       tx.BlockNumber,
-			Timestamp:      tx.Timestamp,
-			FromAddress:    tx.From,
-			ToAddress:      tx.To,
-			Amount:         tx.Amount,
-			TokenType:      tx.TokenSymbol,
-			ContractAddr:   tx.ContractAddress,
-			TransactionFee: tx.Fee,
-		}
-
-		activeTransactions = append(activeTransactions, activeTx)
+		activeTransactions = append(activeTransactions, tx)
 	}
 
 	return activeTransactions, nil
 }
 
 // 获取地址的最近USDT交易
-func (m *ActiveMonitor) getRecentUSDTTransactions(ctx context.Context, address string) ([]ActiveTransaction, error) {
+func (m *ActiveMonitor) getRecentUSDTTransactions(ctx context.Context, address string) ([]Transaction, error) {
 	// 计算30天前的时间
 	thirtyDaysAgo := time.Now().AddDate(0, 0, -m.lookbackDays)
 	now := time.Now()
@@ -168,7 +155,7 @@ func (m *ActiveMonitor) getRecentUSDTTransactions(ctx context.Context, address s
 	}
 
 	// 过滤并转换交易
-	var transactions []ActiveTransaction
+	var transactions []Transaction
 	for _, tx := range trc20Txs {
 		// 过滤金额不在1000-5000之间的交易
 		if tx.Amount < m.minTxAmount || tx.Amount > m.maxTxAmount {
@@ -176,16 +163,17 @@ func (m *ActiveMonitor) getRecentUSDTTransactions(ctx context.Context, address s
 		}
 
 		// 转换为活跃度分析用交易格式
-		activeTx := ActiveTransaction{
-			TxID:           tx.TransactionID,
-			BlockNum:       0, // TRC20Transaction中没有区块号
-			Timestamp:      tx.Timestamp,
-			FromAddress:    tx.From,
-			ToAddress:      tx.To,
-			Amount:         tx.Amount,
-			TokenType:      tx.TokenSymbol,
-			ContractAddr:   m.usdtContract, // 使用配置的USDT合约地址
-			TransactionFee: 0,              // TRC20Transaction中没有交易费用
+		activeTx := Transaction{
+			TxID:            tx.TransactionID,
+			BlockNumber:     0, // TRC20Transaction中没有区块号
+			BlockTimestamp:  tx.BlockTimestamp,
+			From:            tx.From,
+			To:              tx.To,
+			Amount:          tx.Amount,
+			TokenName:       tx.TokenName,
+			TokenSymbol:     tx.TokenSymbol,
+			ContractAddress: m.usdtContract, // 使用配置的USDT合约地址
+			Timestamp:       tx.Timestamp,
 		}
 
 		transactions = append(transactions, activeTx)
@@ -195,13 +183,13 @@ func (m *ActiveMonitor) getRecentUSDTTransactions(ctx context.Context, address s
 }
 
 // 从交易中提取地址
-func (m *ActiveMonitor) extractAddressesFromTransactions(ctx context.Context, transactions []ActiveTransaction) []string {
+func (m *ActiveMonitor) extractAddressesFromTransactions(ctx context.Context, transactions []Transaction) []string {
 	addressSet := make(map[string]struct{})
 
 	for _, tx := range transactions {
 		// 添加转入和转出地址
-		addressSet[tx.FromAddress] = struct{}{}
-		addressSet[tx.ToAddress] = struct{}{}
+		addressSet[tx.From] = struct{}{}
+		addressSet[tx.To] = struct{}{}
 	}
 
 	// 转换为切片
@@ -358,26 +346,26 @@ func (m *ActiveMonitor) analyzeAddress(ctx context.Context, address string, dept
 }
 
 // 分析常转出地址
-func (m *ActiveMonitor) analyzeFrequentOutAddresses(ctx context.Context, sourceAddr string, transactions []ActiveTransaction) ([]FrequentOutAddress, []string) {
+func (m *ActiveMonitor) analyzeFrequentOutAddresses(ctx context.Context, sourceAddr string, transactions []Transaction) ([]FrequentOutAddress, []string) {
 	// 统计转出情况
 	outStats := make(map[string]*FrequentOutAddress)
 
 	for _, tx := range transactions {
 		// 只分析从源地址转出的交易
-		if tx.FromAddress != sourceAddr {
+		if tx.From != sourceAddr {
 			continue
 		}
 
 		// 更新或创建转出统计
-		if _, exists := outStats[tx.ToAddress]; !exists {
-			outStats[tx.ToAddress] = &FrequentOutAddress{
-				Address:       tx.ToAddress,
-				MaskedAddress: m.maskAddress(tx.ToAddress),
+		if _, exists := outStats[tx.To]; !exists {
+			outStats[tx.To] = &FrequentOutAddress{
+				Address:       tx.To,
+				MaskedAddress: m.maskAddress(tx.To),
 				LastTxTime:    tx.Timestamp,
 			}
 		}
 
-		stat := outStats[tx.ToAddress]
+		stat := outStats[tx.To]
 		stat.OutCount++
 		stat.TotalOutAmount += tx.Amount
 
