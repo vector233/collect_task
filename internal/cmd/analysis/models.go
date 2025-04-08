@@ -238,3 +238,16 @@ type Order struct {
 	FixedAmount     float64   // 固定金额
 	RecursionDepth  int       // 递归深度
 }
+
+// TransactionCountParams 获取交易数量的参数
+type TransactionCountParams struct {
+	Start           int        // 起始位置，默认0
+	Limit           int        // 每页数量，默认10
+	ContractAddress string     // 合约地址
+	StartTimestamp  *time.Time // 开始时间
+	EndTimestamp    *time.Time // 结束时间
+	Confirm         *bool      // 是否只返回已确认的交易，默认true
+	RelatedAddress  string     // 相关地址
+	FromAddress     string     // 发送方地址
+	ToAddress       string     // 接收方地址
+}

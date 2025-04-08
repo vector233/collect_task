@@ -301,8 +301,13 @@ func (m *ActiveMonitor) analyzeAddress(ctx context.Context, address string, dept
 		return activeAddr, nil
 	}
 
+	//oneMonthAgo := time.Now().AddDate(0, 0, 30)
+	//now := time.Now()
 	// 获取地址交易数量
-	txCount, err := m.tronAPI.GetTransactionCount(ctx, address, m.usdtContract)
+	txCount, err := m.tronAPI.GetTransactionCount(ctx, TransactionCountParams{
+		RelatedAddress:  address,
+		ContractAddress: m.usdtContract, // todo
+	})
 	if err != nil {
 		g.Log().Errorf(ctx, "获取地址 %s 交易数量失败: %v", address, err)
 		return activeAddr, nil
