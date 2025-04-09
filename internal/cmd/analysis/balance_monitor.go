@@ -74,7 +74,7 @@ func (m *BalanceMonitor) getTableFields() (addressField, balanceField, timeField
 // StartMonitor 启动定时任务
 // pattern: cron表达式，如 "0 */30 * * * *" 每30分钟执行一次
 func (m *BalanceMonitor) StartMonitor(pattern string) error {
-	_, err := gcron.Add(m.ctx, pattern, func(ctx context.Context) {
+	_, err := gcron.AddSingleton(m.ctx, pattern, func(ctx context.Context) {
 		m.UpdateAllAddressesBalance(ctx)
 	}, "UpdateAddressBalance")
 

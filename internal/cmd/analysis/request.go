@@ -176,14 +176,12 @@ func (t *TronAPI) GetTransactionCount(ctx context.Context, params TransactionCou
 	// 设置开始时间
 	if params.StartTimestamp != nil {
 		startTs := params.StartTimestamp.UnixNano() / int64(time.Millisecond)
-		fmt.Println(startTs)
 		q.Add("start_timestamp", fmt.Sprintf("%d", startTs))
 	}
 
 	// 设置结束时间
 	if params.EndTimestamp != nil {
 		endTs := params.EndTimestamp.UnixNano() / int64(time.Millisecond)
-		fmt.Println(endTs)
 		q.Add("end_timestamp", fmt.Sprintf("%d", endTs))
 	}
 
@@ -346,7 +344,7 @@ func (t *TronAPI) GetTokenBalance(ctx context.Context, address, tokenContract st
 }
 
 // GetUSDTTransactions 获取地址的USDT交易记录
-func (t *TronAPI) GetUSDTTransactions(ctx context.Context, address string, params TRC20TransactionParams) ([]TRC20Transaction, error) {
+func (t *TronAPI) GetUSDTTransactions(ctx context.Context, address string, params TRC20TransactionParams) (TRC20TransactionResponse, error) {
 	// 构造URL
 	url := fmt.Sprintf("%s/v1/accounts/%s/transactions/trc20", t.BaseURL, address)
 
@@ -413,7 +411,7 @@ func (t *TronAPI) GetUSDTTransactions(ctx context.Context, address string, param
 	// 创建请求
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("创建请求失败: %v", err)
+		return TRC20TransactionResponse{}, fmt.Errorf("创建请求失败: %v", err)
 	}
 
 	// 拼接参数
@@ -432,22 +430,27 @@ func (t *TronAPI) GetUSDTTransactions(ctx context.Context, address string, param
 	// 发请求
 	_, respBody, err := t.doRequest(ctx, req)
 	if err != nil {
-		return nil, err
+		return TRC20TransactionResponse{}, err
 	}
 
 	// 解析响应
 	var response TRC20TransactionResponse
 	if err := json.Unmarshal(respBody, &response); err != nil {
-		return nil, fmt.Errorf("解析响应失败: %v, 响应: %s", err, string(respBody))
+		return TRC20TransactionResponse{}, fmt.Errorf("解析响应失败: %v, 响应: %s", err, string(respBody))
 	}
 
 	// 检查成功状态
 	if !response.Success {
-		return nil, fmt.Errorf("API调用失败")
+		return response, fmt.Errorf("API调用失败")
 	}
 
-	// 转换为TRC20Transaction结构
+	return response, nil
+}
+
+// ConvertToTRC20Transactions 将API响应转换为TRC20Transaction结构
+func ConvertToTRC20Transactions(response TRC20TransactionResponse) ([]TRC20Transaction, error) {
 	var transactions []TRC20Transaction
+
 	for _, tx := range response.Data {
 		// 解析金额
 		amount := "0"
@@ -509,33 +512,118 @@ func (t *TronAPI) GetIncomingUSDTTransactions(ctx context.Context, address strin
 		params.MinTimestamp = &minTime
 	}
 
-	return t.GetUSDTTransactions(ctx, address, params)
+	// 获取原始响应
+	response, err := t.GetUSDTTransactions(ctx, address, params)
+	if err != nil {
+		return nil, err
+	}
+
+	// 转换为TRC20Transaction结构
+	return ConvertToTRC20Transactions(response)
 }
 
 // GetIncomingUSDTTransactionsByTimeRange 根据时间范围获取USDT转入交易记录
-func (t *TronAPI) GetIncomingUSDTTransactionsByTimeRange(ctx context.Context, address string, startTime, endTime time.Time, limit int) ([]TRC20Transaction, error) {
-	// 创建参数
+func (t *TronAPI) GetIncomingUSDTTransactionsByTimeRange(ctx context.Context, address string, params TRC20TransactionParams) ([]TRC20Transaction, error) {
+	// 确保设置了只查询转入交易
 	onlyTo := true
-	params := TRC20TransactionParams{
-		Limit:        limit,
-		OnlyTo:       &onlyTo,
-		MinTimestamp: &startTime,
-		MaxTimestamp: &endTime,
+	params.OnlyTo = &onlyTo
+
+	// 确保设置了合理的限制
+	if params.Limit <= 0 {
+		params.Limit = 20 // 默认值
 	}
 
-	return t.GetUSDTTransactions(ctx, address, params)
+	// 获取原始响应
+	response, err := t.GetUSDTTransactions(ctx, address, params)
+	if err != nil {
+		return nil, err
+	}
+
+	// 转换为TRC20Transaction结构
+	return ConvertToTRC20Transactions(response)
 }
 
 // GetUSDTTransactionsByTimeRange 根据时间范围获取USDT交易记录
-func (t *TronAPI) GetUSDTTransactionsByTimeRange(ctx context.Context, address string, startTime, endTime time.Time, limit int) ([]TRC20Transaction, error) {
-	// 创建参数
-	params := TRC20TransactionParams{
-		Limit:        limit,
-		MinTimestamp: &startTime,
-		MaxTimestamp: &endTime,
+func (t *TronAPI) GetUSDTTransactionsByTimeRange(ctx context.Context, address string, params TRC20TransactionParams, limit int) ([]TRC20Transaction, error) {
+	// 如果limit小于等于0，使用默认值20
+	if limit <= 0 {
+		limit = 20
 	}
 
-	return t.GetUSDTTransactions(ctx, address, params)
+	// 存储所有交易记录
+	var allTransactions []TRC20Transaction
+
+	// 每次请求的数量，不超过API限制
+	requestLimit := 200
+	if limit < requestLimit {
+		requestLimit = limit
+	}
+
+	// 当前已获取的记录数
+	var fetchedCount int
+
+	// 当前指纹，用于分页
+	var fingerprint string
+
+	// 循环获取交易记录，直到达到limit或没有更多数据
+	for fetchedCount < limit {
+		// 设置本次请求的参数
+		currentParams := params
+		currentParams.Limit = requestLimit // 每次请求使用相同的limit值
+
+		// 如果有指纹，设置指纹用于分页
+		if fingerprint != "" {
+			currentParams.Fingerprint = fingerprint
+		}
+
+		// 获取原始响应
+		response, err := t.GetUSDTTransactions(ctx, address, currentParams)
+		if err != nil {
+			return nil, fmt.Errorf("获取交易记录失败: %w", err)
+		}
+
+		// 转换为TRC20Transaction结构
+		transactions, err := ConvertToTRC20Transactions(response)
+		if err != nil {
+			return nil, fmt.Errorf("转换交易记录失败: %w", err)
+		}
+
+		// 添加到结果集，但不超过总的limit限制
+		remainingNeeded := limit - fetchedCount
+		if len(transactions) > remainingNeeded {
+			allTransactions = append(allTransactions, transactions[:remainingNeeded]...)
+			fetchedCount += remainingNeeded
+		} else {
+			allTransactions = append(allTransactions, transactions...)
+			fetchedCount += len(transactions)
+		}
+
+		// 检查是否有更多数据
+		if response.Meta.Fingerprint == "" || len(transactions) < requestLimit {
+			// 没有更多数据了
+			break
+		}
+
+		// 检查是否已经达到请求的限制
+		if fetchedCount >= limit {
+			break
+		}
+
+		// 更新指纹，用于下一次请求
+		fingerprint = response.Meta.Fingerprint
+
+		// 记录日志
+		g.Log().Debugf(ctx, "已获取 %d/%d 条交易记录，继续获取下一页...", fetchedCount, limit)
+
+		//select {
+		//case <-ctx.Done():
+		//	return nil, ctx.Err()
+		//case <-time.After(100 * time.Millisecond):
+		//	// 100ms 继续执行
+		//}
+	}
+
+	return allTransactions, nil
 }
 
 // GetLatestBlock 获取波场最新区块
