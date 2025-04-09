@@ -1,9 +1,24 @@
 package analysis
 
 import (
-	"encoding/json"
 	"time"
 )
+
+const ContractTypeTriggerSmart = "TriggerSmartContract"
+
+// TRC20TransactionParams 定义TRC20交易查询参数
+type TRC20TransactionParams struct {
+	OnlyConfirmed   *bool      `json:"only_confirmed,omitempty"`   // 是否只返回已确认交易
+	OnlyUnconfirmed *bool      `json:"only_unconfirmed,omitempty"` // 是否只返回未确认交易
+	Limit           int        `json:"limit"`                      // 每页交易数量，默认20，最大200
+	Fingerprint     string     `json:"fingerprint,omitempty"`      // 上一页最后一笔交易的指纹
+	OrderBy         string     `json:"order_by,omitempty"`         // 排序方式，默认block_timestamp,desc
+	MinTimestamp    *time.Time `json:"min_timestamp,omitempty"`    // 最小区块时间戳
+	MaxTimestamp    *time.Time `json:"max_timestamp,omitempty"`    // 最大区块时间戳
+	ContractAddress string     `json:"contract_address,omitempty"` // 合约地址
+	OnlyTo          *bool      `json:"only_to,omitempty"`          // 是否只返回转入交易
+	OnlyFrom        *bool      `json:"only_from,omitempty"`        // 是否只返回转出交易
+}
 
 // Block 区块信息
 type Block struct {
@@ -12,21 +27,31 @@ type Block struct {
 	Timestamp      int64     `json:"timestamp"`
 	TransactionNum int       `json:"transaction_num"`
 	Transactions   []string  `json:"transactions"`
+	TxStatuses     []string  `json:"tx_statuses"`
+	WitnessAddress string    `json:"witness_address"`
+	ParentHash     string    `json:"parent_hash"`
+	Version        int       `json:"version"`
+	TxTrieRoot     string    `json:"tx_trie_root"`
 	Confirmed      bool      `json:"confirmed"`
 	BlockTime      time.Time `json:"-"` // 转换后时间
 }
 
 // Transaction 交易信息
 type Transaction struct {
-	TxID           string    `json:"tx_id"`
-	BlockNumber    int64     `json:"block_number"`
-	BlockTimestamp int64     `json:"block_timestamp"`
-	From           string    `json:"from"`
-	To             string    `json:"to"`
-	Amount         float64   `json:"amount"`
-	ContractType   string    `json:"contract_type"`
-	Status         string    `json:"status"`
-	Timestamp      time.Time `json:"-"` // 转换后时间
+	TxID            string    `json:"tx_id"`
+	BlockNumber     int64     `json:"block_number"`
+	BlockTimestamp  int64     `json:"block_timestamp"`
+	From            string    `json:"from"`
+	To              string    `json:"to"`
+	Amount          float64   `json:"amount"`
+	TokenName       string    `json:"token_name"`       // 代币名称，如 "Tether USD"
+	TokenSymbol     string    `json:"token_symbol"`     // 代币符号，如 "USDT"
+	ContractAddress string    `json:"contract_address"` // 合约地址
+	ContractType    string    `json:"contract_type"`    // 合约类型，如 "TriggerSmartContract"
+	Status          string    `json:"status"`           // 交易状态
+	Confirmed       bool      `json:"confirmed"`        // 是否已确认
+	Fee             float64   `json:"fee"`              // 交易费用
+	Timestamp       time.Time `json:"-"`                // 转换后时间
 }
 
 // BlockResponse 表示波场区块API响应
@@ -43,28 +68,34 @@ type BlockResponse struct {
 		} `json:"raw_data"`
 		WitnessSignature string `json:"witness_signature"`
 	} `json:"block_header"`
-	Transactions []struct {
-		Ret []struct {
-			ContractRet string `json:"contractRet"`
-		} `json:"ret"`
-		Signature []string `json:"signature"`
-		TxID      string   `json:"txID"`
-		RawData   struct {
-			Contract []struct {
-				Parameter struct {
-					Value   json.RawMessage `json:"value"`
-					TypeURL string          `json:"type_url"`
-				} `json:"parameter"`
-				Type         string `json:"type"`
-				PermissionID int    `json:"Permission_id,omitempty"`
-			} `json:"contract"`
-			RefBlockBytes string `json:"ref_block_bytes"`
-			RefBlockHash  string `json:"ref_block_hash"`
-			Expiration    int64  `json:"expiration"`
-			Timestamp     int64  `json:"timestamp"`
-		} `json:"raw_data"`
-		RawDataHex string `json:"raw_data_hex"`
-	} `json:"transactions"`
+	Transactions []BlockTransaction `json:"transactions"`
+}
+
+type BlockTransaction struct {
+	Ret []struct {
+		ContractRet string `json:"contractRet"`
+	} `json:"ret"`
+	Signature []string `json:"signature"`
+	TxID      string   `json:"txID"`
+	RawData   struct {
+		Contract []struct {
+			Parameter struct {
+				Value struct {
+					Data            string `json:"data"`
+					OwnerAddress    string `json:"owner_address"`
+					ContractAddress string `json:"contract_address"`
+				} `json:"value"`
+				TypeURL string `json:"type_url"`
+			} `json:"parameter"`
+			Type         string `json:"type"`
+			PermissionID int    `json:"Permission_id,omitempty"`
+		} `json:"contract"`
+		RefBlockBytes string `json:"ref_block_bytes"`
+		RefBlockHash  string `json:"ref_block_hash"`
+		Expiration    int64  `json:"expiration"`
+		Timestamp     int64  `json:"timestamp"`
+	} `json:"raw_data"`
+	RawDataHex string `json:"raw_data_hex"`
 }
 
 // TokenInfo 代币信息
@@ -75,12 +106,15 @@ type TokenInfo struct {
 	ContractID string
 }
 
-// ActiveAddress 活跃地址信息
+// 活跃地址结构
 type ActiveAddress struct {
-	Address    string
-	Balance    float64
-	TxCount    int
-	LastTxTime time.Time
+	Address          string    // 地址
+	Balance          float64   // 余额
+	TxCount          int       // 交易总数
+	LastActiveTime   time.Time // 最后活跃时间
+	FrequentOutAddrs []string  // 常转出地址列表
+	IsActive         bool      // 是否活跃
+	RecursionDepth   int       // 递归深度
 }
 
 // FrequentTransferAddress 常转出地址信息
@@ -125,14 +159,17 @@ type TRC20TransactionResponse struct {
 			Decimals int    `json:"decimals"`
 			Address  string `json:"address"`
 		} `json:"token_info"`
-		Type     string `json:"type"`
-		Status   string `json:"status,omitempty"`
-		Approved bool   `json:"approved,omitempty"`
+		Type   string `json:"type"`
+		Status string `json:"status,omitempty"`
 	} `json:"data"`
 	Success bool `json:"success"`
 	Meta    struct {
-		At       int64 `json:"at"`
-		PageSize int   `json:"page_size"`
+		At          int64  `json:"at"`
+		PageSize    int    `json:"page_size"`
+		Fingerprint string `json:"fingerprint,omitempty"` // 分页指纹
+		Links       struct {
+			Next string `json:"next,omitempty"` // 下一页链接
+		} `json:"links,omitempty"`
 	} `json:"meta"`
 }
 
@@ -147,7 +184,6 @@ type TRC20Transaction struct {
 	TokenSymbol    string    `json:"token_symbol"`
 	TokenDecimals  int       `json:"token_decimals"`
 	Status         string    `json:"status"`
-	Confirmed      bool      `json:"confirmed"`
 	Timestamp      time.Time `json:"-"` // 转换后时间
 }
 
@@ -156,4 +192,62 @@ type APIErrorResponse struct {
 	Success    bool   `json:"Success"`
 	Error      string `json:"Error"`
 	StatusCode int    `json:"StatusCode"`
+}
+
+// TransactionInfoResponse 表示交易信息API响应
+type TransactionInfoResponse struct {
+	ID              string   `json:"id"`
+	BlockNumber     int64    `json:"blockNumber"`
+	BlockTimeStamp  int64    `json:"blockTimeStamp"`
+	ContractResult  []string `json:"contractResult"`
+	ContractAddress string   `json:"contract_address,omitempty"`
+	Receipt         struct {
+		EnergyUsage       int64  `json:"energy_usage"`
+		EnergyFee         int64  `json:"energy_fee"`
+		OriginEnergyUsage int64  `json:"origin_energy_usage"`
+		EnergyUsageTotal  int64  `json:"energy_usage_total"`
+		NetUsage          int64  `json:"net_usage"`
+		NetFee            int64  `json:"net_fee"`
+		Result            string `json:"result"`
+	} `json:"receipt"`
+	Log []struct {
+		Address string   `json:"address"`
+		Topics  []string `json:"topics"`
+		Data    string   `json:"data"`
+	} `json:"log,omitempty"`
+	Fee int64 `json:"fee"`
+}
+
+// ActiveTransaction 活跃度分析用交易记录结构
+type ActiveTransaction struct {
+	TxID           string    // 交易ID
+	BlockNum       int64     // 区块号
+	Timestamp      time.Time // 交易时间
+	FromAddress    string    // 转出地址
+	ToAddress      string    // 转入地址
+	Amount         float64   // 交易金额
+	TokenType      string    // 代币类型
+	ContractAddr   string    // 合约地址
+	TransactionFee float64   // 交易费用
+}
+
+// 常转出地址结构
+type FrequentOutAddress struct {
+	Address        string    // 地址
+	MaskedAddress  string    // 掩码后地址
+	OutCount       int       // 转出次数
+	TotalOutAmount float64   // 总转出金额
+	AvgOutAmount   float64   // 平均转出金额
+	LastTxTime     time.Time // 最后交易时间
+	LargeOutCount  int       // 大额转出次数(>10000)
+}
+
+// 订单结构
+type Order struct {
+	OrderID         string    // 订单号
+	ActiveAddress   string    // 活跃地址
+	FrequentOutAddr string    // 常转出地址(掩码后)
+	LastTxTime      time.Time // 最近交易时间
+	FixedAmount     float64   // 固定金额
+	RecursionDepth  int       // 递归深度
 }
