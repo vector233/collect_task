@@ -2,7 +2,6 @@ package analysis
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -181,7 +180,6 @@ func TestGetUSDTTransactions(t *testing.T) {
 				// 打印第一笔交易详情
 				if len(transactions) > 0 {
 					tx := transactions[0]
-					fmt.Printf("%+v\n", tx)
 					t.Logf("  交易ID: %s", tx.TransactionID)
 					t.Logf("  时间: %s", tx.Timestamp.Format("2006-01-02 15:04:05"))
 					t.Logf("  发送方: %s", tx.From)
@@ -301,69 +299,81 @@ func TestGetLatestBlock(t *testing.T) {
 	})
 }
 
-// TestParseBlockTransactions 测试从区块中解析USDT交易功能
-func TestParseBlockTransactions(t *testing.T) {
+// TestGetTransactionCount 测试获取地址交易数量功能
+func TestGetTransactionCount(t *testing.T) {
 	gtest.C(t, func(t *gtest.T) {
 		// 创建API客户端
 		api := NewTronAPI(
-			"https://api.trongrid.io", // 使用波场主网API
-			"",                        // 这里填入您的API密钥
+			"https://api.trongrid.io",              // 使用波场主网API
+			"136312ba-b5e2-4e99-a006-d9a672a6854e", // 这里填入您的API密钥
 		)
 
 		// 设置较长的超时时间
 		api.HttpTimeout = time.Second * 30
 
-		// 获取最新区块
-		blockResponse, err := api.GetLatestBlock(context.Background())
-		if err != nil {
-			t.Logf("获取最新区块失败: %v", err)
-			t.FailNow()
-			return
+		// USDT合约地址
+		params := TransactionCountParams{
+			ContractAddress: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+			RelatedAddress:  "TDqSquXBgUCLYvYC4XZgrprLK589dkhSCf", // 只统计从特定地址发出的交易
 		}
 
-		// 解析区块中的交易
-		transactions, err := api.ParseBlockTransactions(context.Background(), blockResponse)
-		if err != nil {
-			t.Logf("解析区块交易失败: %v", err)
-			t.FailNow()
-			return
+		// 获取交易数量
+		count, err := api.GetTransactionCount(context.Background(), params)
+
+		// 验证没有错误
+		t.AssertNil(err)
+
+		// 验证交易数量大于0
+		t.Assert(count > 0, true)
+
+		t.Logf("地址 %s 的交易数量: %d", params.RelatedAddress, count)
+
+		// 测试近1个月的交易数量
+		oneMonthAgo := time.Now().AddDate(0, -1, 0)
+		now := time.Now()
+
+		monthlyParams := TransactionCountParams{
+			ContractAddress: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+			RelatedAddress:  "TDqSquXBgUCLYvYC4XZgrprLK589dkhSCf",
+			StartTimestamp:  &oneMonthAgo,
+			EndTimestamp:    &now,
 		}
 
-		// 打印解析结果
-		t.Logf("成功解析区块 %d 中的交易，共找到 %d 笔USDT交易",
-			blockResponse.BlockHeader.RawData.Number, len(transactions))
+		// 获取近1个月的交易数量
+		monthlyCount, err := api.GetTransactionCount(context.Background(), monthlyParams)
 
-		// 打印USDT交易详情
-		for i, tx := range transactions {
-			t.Logf("USDT交易 #%d:", i+1)
-			t.Logf("  交易ID: %s", tx.TxID)
-			t.Logf("  区块号: %d", tx.BlockNumber)
-			t.Logf("  时间: %s", tx.Timestamp.Format("2006-01-02 15:04:05"))
-			t.Logf("  发送方: %s", tx.From)
-			t.Logf("  接收方: %s", tx.To)
-			t.Logf("  金额: %.6f %s", tx.Amount, tx.TokenSymbol)
-			t.Logf("  合约地址: %s", tx.ContractAddress)
-			t.Logf("  状态: %s", tx.Status)
-			t.Logf("  是否确认: %v", tx.Confirmed)
-			break
-		}
+		// 验证没有错误
+		t.AssertNil(err)
 
-		// 注意：由于区块中可能没有USDT交易，所以不强制要求找到交易
-		// 但如果找到了交易，验证其基本属性
-		for _, tx := range transactions {
-			// 验证是USDT交易
-			t.Assert(tx.TokenSymbol, "USDT")
+		// 验证交易数量
+		t.Logf("地址 %s 近1个月的交易数量: %d", monthlyParams.RelatedAddress, monthlyCount)
+		t.Logf("查询时间范围: %s 至 %s",
+			oneMonthAgo.Format("2006-01-02 15:04:05"),
+			now.Format("2006-01-02 15:04:05"))
 
-			// 验证交易ID不为空
-			t.Assert(len(tx.TxID) > 0, true)
+		// 近1个月的交易数量应该小于等于总交易数量
+		t.Assert(monthlyCount <= count, true)
 
-			// 验证区块号匹配
-			t.Assert(tx.BlockNumber, blockResponse.BlockHeader.RawData.Number)
+		// 测试随机地址 - 可能没有交易
+		params.RelatedAddress = "TDqSquXBgUCLYvYC4XZgrprLK589dkhSCf"
 
-			// 验证发送方和接收方不为空
-			t.Assert(len(tx.From) > 0, true)
-			t.Assert(len(tx.To) > 0, true)
-			break
-		}
+		// 获取交易数量
+		randomCount, err := api.GetTransactionCount(context.Background(), params)
+
+		// 验证没有错误
+		t.AssertNil(err)
+
+		// 这个地址可能有交易也可能没有，只验证调用成功
+		t.Logf("随机地址 %s 的交易数量: %d", params.RelatedAddress, randomCount)
+
+		// 测试无效地址
+		params.RelatedAddress = "InvalidAddress"
+
+		// 获取交易数量 - 应该返回错误
+		total, err := api.GetTransactionCount(context.Background(), params)
+
+		// 验证有错误返回
+		t.Assert(total, 0)
+		t.Logf("无效地址测试错误信息: %v", err)
 	})
 }

@@ -142,10 +142,109 @@ func (t *TronAPI) GetAddressTransactions(ctx context.Context, address string, li
 	return nil, nil
 }
 
-// 获取地址交易数量 TODO
-func (t *TronAPI) GetTransactionCount(ctx context.Context, address, tokenContract string) (int, error) {
-	// TODO: 实现获取交易数量的API调用
-	return 0, nil
+// 获取地址交易数量
+func (t *TronAPI) GetTransactionCount(ctx context.Context, params TransactionCountParams) (int, error) {
+	// 构造URL - 使用Tronscan API
+	url := fmt.Sprintf("https://apilist.tronscan.org/api/token_trc20/transfers")
+
+	// 创建请求
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return 0, fmt.Errorf("创建请求失败: %v", err)
+	}
+
+	// 添加查询参数
+	q := req.URL.Query()
+	q.Add("count", "true") // 请求返回总数
+
+	// 设置起始位置
+	if params.Start > 0 {
+		q.Add("start", fmt.Sprintf("%d", params.Start))
+	}
+
+	// 设置每页数量
+	if params.Limit <= 0 {
+		params.Limit = 1 // 只需要获取数量，不需要实际数据
+	}
+	q.Add("limit", fmt.Sprintf("%d", params.Limit))
+
+	// 设置合约地址
+	if params.ContractAddress != "" {
+		q.Add("contract_address", params.ContractAddress)
+	}
+
+	// 设置开始时间
+	if params.StartTimestamp != nil {
+		startTs := params.StartTimestamp.UnixNano() / int64(time.Millisecond)
+		fmt.Println(startTs)
+		q.Add("start_timestamp", fmt.Sprintf("%d", startTs))
+	}
+
+	// 设置结束时间
+	if params.EndTimestamp != nil {
+		endTs := params.EndTimestamp.UnixNano() / int64(time.Millisecond)
+		fmt.Println(endTs)
+		q.Add("end_timestamp", fmt.Sprintf("%d", endTs))
+	}
+
+	// 设置是否只返回已确认的交易
+	if params.Confirm != nil {
+		if *params.Confirm {
+			q.Add("confirm", "true")
+		} else {
+			q.Add("confirm", "false")
+		}
+	}
+
+	// 设置相关地址
+	if params.RelatedAddress != "" {
+		q.Add("relatedAddress", params.RelatedAddress)
+	}
+
+	// 设置发送方地址
+	if params.FromAddress != "" {
+		q.Add("fromAddress", params.FromAddress)
+	}
+
+	// 设置接收方地址
+	if params.ToAddress != "" {
+		q.Add("toAddress", params.ToAddress)
+	}
+
+	req.URL.RawQuery = q.Encode()
+
+	// 设置请求头
+	req.Header.Set("Accept", "application/json")
+
+	// 设置API Key
+	if t.APIKey != "" {
+		// Tronscan API使用APIKEY作为请求头
+		req.Header.Set("APIKEY", t.APIKey)
+
+		// 同时保留TRON-PRO-API-KEY以兼容TronGrid API
+		req.Header.Set("TRON-PRO-API-KEY", t.APIKey)
+
+		g.Log().Debugf(ctx, "使用API Key [%s] 请求Tronscan API", maskAPIKey(t.APIKey))
+	}
+
+	// 发送请求
+	_, respBody, err := t.doRequest(ctx, req)
+	if err != nil {
+		return 0, fmt.Errorf("请求交易数量失败: %v", err)
+	}
+
+	// 解析响应
+	var response struct {
+		Total      int `json:"total"`
+		RangeTotal int `json:"rangeTotal"`
+	}
+
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		return 0, fmt.Errorf("解析响应失败: %v, 原始响应: %s", err, string(respBody))
+	}
+
+	g.Log().Debugf(ctx, "地址 %s 的交易数量: %d, %d", params.RelatedAddress, response.Total, response.RangeTotal)
+	return response.Total, nil
 }
 
 // 获取代币余额
@@ -570,95 +669,4 @@ func (t *TronAPI) fetchTransactionDetailInfo(ctx context.Context, txID string) (
 	}
 
 	return txInfoResponse, nil
-}
-
-// ParseBlockTransactions 将区块中的交易解析为Transaction结构体
-func (t *TronAPI) ParseBlockTransactions(ctx context.Context, blockResponse BlockResponse) ([]Transaction, error) {
-	var transactions []Transaction
-
-	for _, tx := range blockResponse.Transactions {
-		// 检查是否有合约调用
-		if len(tx.RawData.Contract) == 0 {
-			continue
-		}
-
-		// 初始化交易结构
-		transaction := Transaction{
-			TxID:           tx.TxID,
-			BlockNumber:    blockResponse.BlockHeader.RawData.Number,
-			BlockTimestamp: blockResponse.BlockHeader.RawData.Timestamp,
-			Timestamp:      time.Unix(blockResponse.BlockHeader.RawData.Timestamp/1000, 0),
-		}
-
-		// 设置交易状态
-		if len(tx.Ret) > 0 {
-			transaction.Status = tx.Ret[0].ContractRet
-			transaction.Confirmed = tx.Ret[0].ContractRet == "SUCCESS"
-		}
-
-		contract := tx.RawData.Contract[0]
-		transaction.ContractType = contract.Type
-
-		// 检查是否是USDT交易
-		isUSDT := false
-
-		// 根据合约类型处理不同的交易
-		if contract.Type == ContractTypeTriggerSmart {
-			// 获取合约地址
-			contractAddress := contract.Parameter.Value.ContractAddress
-			transaction.ContractAddress = contractAddress
-
-			// 检查是否是USDT合约地址
-			if contractAddress == "41a614f803b6fd780986a42c78ec9c7f77e6ded13c" || // 十六进制
-				contractAddress == "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" { // Base58
-				isUSDT = true
-				transaction.TokenName = "Tether USD"
-				transaction.TokenSymbol = "USDT"
-			}
-
-			// 获取调用者地址
-			ownerAddress := contract.Parameter.Value.OwnerAddress
-			transaction.From = ownerAddress
-
-			// 获取调用数据
-			data := contract.Parameter.Value.Data
-
-			// 检查是否是transfer方法 (0xa9059cbb)
-			if len(data) >= 8 && strings.HasPrefix(data, "a9059cbb") {
-				// 确认是USDT转账
-				if isUSDT {
-					// 提取接收地址
-					if len(data) >= 72 {
-						toAddrHex := "41" + data[32:72]
-						toAddr, err := utility.HexAddressToBase58(toAddrHex)
-						if err == nil {
-							transaction.To = toAddr
-						}
-					}
-
-					// 提取金额
-					if len(data) >= 136 {
-						amountHex := data[72:136]
-						amountBig, ok := new(big.Int).SetString(amountHex, 16)
-						if ok {
-							// USDT有6位小数
-							divisor := new(big.Int).Exp(big.NewInt(10), big.NewInt(6), nil)
-							amountFloat := new(big.Float).SetInt(amountBig)
-							divisorFloat := new(big.Float).SetInt(divisor)
-							result := new(big.Float).Quo(amountFloat, divisorFloat)
-
-							transaction.Amount, _ = result.Float64()
-						}
-					}
-				}
-			}
-		}
-
-		// 只添加USDT交易
-		if isUSDT {
-			transactions = append(transactions, transaction)
-		}
-	}
-
-	return transactions, nil
 }
