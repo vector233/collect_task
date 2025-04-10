@@ -1,4 +1,4 @@
-package cmd
+package pattern
 
 import (
 	"context"

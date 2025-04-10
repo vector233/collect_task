@@ -1,62 +1,53 @@
-# https://goframe.org/docs/web/server-config-file-template
 server:
   address:     ":8000"
   openapiPath: "/api.json"
   swaggerPath: "/swagger"
 
-# https://goframe.org/docs/core/glog-config
 logger:
   level : "info"
   stdout: true
 
-# https://goframe.org/docs/core/gdb-config-file
 database:
   default:
-    # link: "mysql:db_e_root:g5G6ymyedAmk5wgb@tcp(3.34.50.72:3306)/bivdex_e"
     link: "mysql:root:1qaz@WSX3edc@tcp(124.221.133.54:3307)/tron?charset=utf8mb4&parseTime=True&loc=Local"
-    # 数据库连接池配置
-    maxIdle: 10           # 连接池最大空闲连接数
-    maxOpen: 500          # 连接池最大打开连接数
-    maxLifetime: 30       # 连接对象最长生命周期(秒)
+    maxIdle: 10
+    maxOpen: 500
+    maxLifetime: 30
 
 tron:
-  # API 相关配置
   api:
-    baseURL: "http://104.233.192.15:8090"  # TRON API 基础URL
-    key: ""                                # TRON API 密钥
-    timeout: 30                            # API 请求超时时间(秒)
+    baseURL: "http://104.233.192.15:8090"
+    key: ""
+    timeout: 30
     rateLimit:
-      requestsPerSecond: 200                # api 每秒请求数限制
-      bucket: 200                           # 令牌桶容量
+      requestsPerSecond: 200
+      bucket: 200
     usdt:
-      contract: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"  # USDT 合约地址
+      contract: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
   
-  # 余额刷新相关配置
   balance:
-    table: "t_order_from_address"          # 要查询的表名
-    concurrency: 200                       # 并发处理多少地址
-    batchSize: 200                         # 并发处理的写入批次大小
-    cron: "0 */30 * * * *"                 # 定时任务执行周期(每30分钟)
+    table: "t_order_from_address"
+    concurrency: 200
+    batchSize: 200
+    cron: "0 */30 * * * *"
 
-  count: 100                                     # 生成数据数量, gen_a 有效
-  address: "TDqSquXBgUCLYvYC4XZgrprLK589dkhSCf"  # 初始地址
-  maxConcurrency: 10                             # 最大并发数
-  maxDepth: 100                                  # 最大递归深度
-  maxAddressesPerLevel: 1000                      # 每层最多处理的地址数量
-  maxPagesPerAddress: 10                         # 每个地址最多查询的页数
-  prefix: 3                                      # 前3
-  suffix: 4                                      # 后4
-   # pipei 模式配置
+  count: 100
+  address: "TDqSquXBgUCLYvYC4XZgrprLK589dkhSCf"
+  maxConcurrency: 10
+  maxDepth: 100
+  maxAddressesPerLevel: 1000
+  maxPagesPerAddress: 10
+  prefix: 3
+  suffix: 4
   pipei:
-    runMinutes: 10  # 程序运行10分钟后重启
-    recordThreshold: 10  # 当新增记录超过10条时重启
-    gpuCount: 1     # 要跑的卡数量
-    limit: 30000 # 最多跑多少任务
+    runMinutes: 10
+    recordThreshold: 10
+    gpuCount: 1
+    limit: 30000
 
-  # lianghao 模式配置
   lianghao:
-    runMinutes: 15  # 程序运行15分钟后重启
-    recordThreshold: 10  # 当新增记录超过10条时重启
-    gpuCount: 1     # 要跑的卡数量
-    suffix: "5"  # 靓号尾数
-    limit: 30000 # 最多跑多少任务
+    runMinutes: 15
+    recordThreshold: 10
+    gpuCount: 1
+    suffix: "5"
+    limit: 30000

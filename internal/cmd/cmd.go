@@ -5,8 +5,9 @@ import (
 
 	"github.com/gogf/gf/v2/os/gcmd"
 
-	"tron-lion/internal/cmd/analysis" // 添加这一行
+	"tron-lion/internal/cmd/analysis"
 	"tron-lion/internal/cmd/generate_data"
+	"tron-lion/internal/cmd/pattern"
 )
 
 var (
@@ -30,9 +31,9 @@ var (
 
 func init() {
 	err := Main.AddCommand(
-		&TronPipei,
-		&TronLianghao,
-		&TronTest,
+		&pattern.TronPipei,
+		&pattern.TronLianghao,
+		&pattern.TronTest,
 		&generate_data.TronGenerateA,
 		&generate_data.TronGenerateE,
 		&generate_data.TronGenerateD,
