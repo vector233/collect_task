@@ -108,13 +108,13 @@ type TokenInfo struct {
 
 // 活跃地址结构
 type ActiveAddress struct {
-	Address          string    // 地址
-	Balance          float64   // 余额
-	TxCount          int       // 交易总数
-	LastActiveTime   time.Time // 最后活跃时间
-	FrequentOutAddrs []string  // 常转出地址列表
-	IsActive         bool      // 是否活跃
-	RecursionDepth   int       // 递归深度
+	Address         string    // 地址
+	Balance         float64   // 余额
+	TxCount         int       // 交易总数
+	LastActiveTime  time.Time // 最后活跃时间
+	FrequentOutAddr string    // 常转出地址列表
+	IsActive        bool      // 是否活跃
+	RecursionDepth  int       // 递归深度
 }
 
 // FrequentTransferAddress 常转出地址信息

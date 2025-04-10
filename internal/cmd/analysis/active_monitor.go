@@ -142,6 +142,60 @@ func (m *ActiveMonitor) getRecentBlockUSDTTransactions(ctx context.Context) ([]T
 	return activeTransactions, nil
 }
 
+// 获取地址的30天内所有USDT交易（用于判断活跃地址）
+func (m *ActiveMonitor) getRecentAllUSDTTransactions(ctx context.Context, address string) ([]Transaction, error) {
+	thirtyDaysAgo := time.Now().AddDate(0, 0, -m.lookbackDays)
+	now := time.Now()
+
+	var params TRC20TransactionParams
+	params.MinTimestamp = &thirtyDaysAgo
+	params.MaxTimestamp = &now
+	// 不限制交易数量，获取所有30天内的交易
+	trc20Txs, err := m.tronAPI.GetUSDTTransactionsByTimeRange(ctx, address, params, 0)
+	if err != nil {
+		return nil, fmt.Errorf("获取地址 %s 30天内交易历史失败: %v", address, err)
+	}
+
+	// 过滤并转换交易
+	var transactions []Transaction
+	for _, tx := range trc20Txs {
+		// 过滤金额不在1000-5000之间的交易
+		if tx.Amount < m.minTxAmount || tx.Amount > m.maxTxAmount {
+			continue
+		}
+
+		// 转换为活跃度分析用交易格式
+		activeTx := Transaction{
+			TxID:            tx.TransactionID,
+			BlockNumber:     0, // TRC20Transaction中没有区块号
+			BlockTimestamp:  tx.BlockTimestamp,
+			From:            tx.From,
+			To:              tx.To,
+			Amount:          tx.Amount,
+			TokenName:       tx.TokenName,
+			TokenSymbol:     tx.TokenSymbol,
+			ContractAddress: m.usdtContract, // 使用配置的USDT合约地址
+			Timestamp:       tx.Timestamp,
+		}
+
+		transactions = append(transactions, activeTx)
+	}
+
+	return transactions, nil
+}
+
+// 获取地址的最近1000笔USDT交易（用于分析常转地址）
+func (m *ActiveMonitor) getRecentLimitedUSDTTransactions(ctx context.Context, address string) ([]Transaction, error) {
+	var params TRC20TransactionParams
+	// 限制为最近1000笔交易
+	trc20Txs, err := m.tronAPI.GetUSDTTransactionsByTimeRange(ctx, address, params, 1000)
+	if err != nil {
+		return nil, fmt.Errorf("获取地址 %s 最近1000笔交易历史失败: %v", address, err)
+	}
+
+	return ConvertToTRC20Transactions(trc20Txs)
+}
+
 // 获取地址的最近USDT交易
 func (m *ActiveMonitor) getRecentUSDTTransactions(ctx context.Context, address string) ([]Transaction, error) {
 	// 计算30天前的时间
@@ -237,12 +291,21 @@ func (m *ActiveMonitor) analyzeActiveAddressesRecursively(ctx context.Context, a
 			defer func() { <-semaphore }()
 
 			// 分析单个地址
-			activeAddr, newAddresses := m.analyzeAddress(ctx, address, depth)
+			activeAddr, _ := m.analyzeAddress(ctx, address, depth)
 
 			if activeAddr.IsActive {
 				mu.Lock()
 				activeAddresses = append(activeAddresses, activeAddr)
-				nextLevelAddresses = append(nextLevelAddresses, newAddresses...)
+				//nextLevelAddresses = append(nextLevelAddresses, newAddresses...)
+				recent30DaysTx, err := m.getRecentAllUSDTTransactions(ctx, activeAddr.Address)
+				if err != nil {
+					g.Log().Infof(ctx, "getRecentAllUSDTTransactions err: %v", err)
+					return
+				}
+				// 判断这些交易中符合活跃地址条件的用于下一层递归 todo
+				for _, tx := range recent30DaysTx {
+					fmt.Println(tx)
+				}
 				mu.Unlock()
 			}
 		}(addr)
@@ -324,9 +387,10 @@ func (m *ActiveMonitor) analyzeAddress(ctx context.Context, address string, dept
 	if txCount < minTxCount || txCount > maxTxCount {
 		return activeAddr, nil
 	}
+	activeAddr.IsActive = true // todo
 
-	// 获取地址的最近USDT交易
-	transactions, err := m.getRecentUSDTTransactions(ctx, address)
+	// 获取地址的最近 1000 笔USDT交易
+	transactions, err := m.getRecentLimitedUSDTTransactions(ctx, address)
 	if err != nil {
 		g.Log().Errorf(ctx, "获取地址 %s 最近USDT交易失败: %v", address, err)
 		return activeAddr, nil
@@ -342,15 +406,11 @@ func (m *ActiveMonitor) analyzeAddress(ctx context.Context, address string, dept
 
 	// 如果有符合条件的常转出地址，则标记为活跃
 	if len(frequentOutAddrs) > 0 {
-		activeAddr.IsActive = true
-		activeAddr.FrequentOutAddrs = make([]string, len(frequentOutAddrs))
+		activeAddr.IsActive = true // todo
+		// 只取转出金额最多的那一条作为常转地址
+		activeAddr.FrequentOutAddr = frequentOutAddrs[0].Address
 
-		for i, addr := range frequentOutAddrs {
-			activeAddr.FrequentOutAddrs[i] = addr.Address
-
-			// 生成订单并保存
-			m.generateAndSaveOrder(ctx, activeAddr, addr)
-		}
+		m.generateAndSaveOrder(ctx, activeAddr, frequentOutAddrs[0])
 	}
 
 	return activeAddr, newAddresses
@@ -393,7 +453,7 @@ func (m *ActiveMonitor) analyzeFrequentOutAddresses(ctx context.Context, sourceA
 
 	// 计算平均转出金额并筛选符合条件的常转出地址
 	var frequentOutAddrs []FrequentOutAddress
-	var newAddresses []string
+	var newAddresses []string // todo 这个应该不需要
 
 	for _, stat := range outStats {
 		// 计算平均转出金额
@@ -455,7 +515,7 @@ func (m *ActiveMonitor) generateAndSaveOrder(ctx context.Context, activeAddr Act
 		ActiveAddress:   activeAddr.Address,
 		FrequentOutAddr: frequentOutAddr.MaskedAddress,
 		LastTxTime:      frequentOutAddr.LastTxTime,
-		FixedAmount:     frequentOutAddr.AvgOutAmount, // 使用平均转出金额作为固定金额
+		FixedAmount:     frequentOutAddr.AvgOutAmount, // 使用平均转出金额作为固定金额 todo 待确认
 		RecursionDepth:  activeAddr.RecursionDepth,
 	}
 

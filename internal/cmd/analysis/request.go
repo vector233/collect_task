@@ -545,9 +545,9 @@ func (t *TronAPI) GetIncomingUSDTTransactionsByTimeRange(ctx context.Context, ad
 
 // GetUSDTTransactionsByTimeRange 根据时间范围获取USDT交易记录
 func (t *TronAPI) GetUSDTTransactionsByTimeRange(ctx context.Context, address string, params TRC20TransactionParams, limit int) ([]TRC20Transaction, error) {
-	// 如果limit小于等于0，使用默认值20
+	// 如果limit小于等于0，使用默认值200
 	if limit <= 0 {
-		limit = 20
+		limit = 200
 	}
 
 	// 存储所有交易记录
