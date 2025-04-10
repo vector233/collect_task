@@ -72,7 +72,7 @@ func NewActiveMonitor(ctx context.Context, tronAPI *TronAPI, usdtContract string
 
 // 启动定时监控
 func (m *ActiveMonitor) StartMonitor(pattern string) error {
-	_, err := gcron.Add(m.ctx, pattern, func(ctx context.Context) {
+	_, err := gcron.AddSingleton(m.ctx, pattern, func(ctx context.Context) {
 		m.AnalyzeRecentTransactions(ctx)
 	}, "AnalyzeUSDTTransactions")
 
@@ -148,8 +148,14 @@ func (m *ActiveMonitor) getRecentUSDTTransactions(ctx context.Context, address s
 	thirtyDaysAgo := time.Now().AddDate(0, 0, -m.lookbackDays)
 	now := time.Now()
 
+	var params TRC20TransactionParams
+	params.MinTimestamp = &thirtyDaysAgo
+	params.MaxTimestamp = &now
+	// todo 可通过参数配置查询所有，还是只查询转入 or 转出
+	//params.OnlyFrom
+	//params.OnlyTo
 	// 使用已实现的GetUSDTTransactionsByTimeRange方法获取交易历史
-	trc20Txs, err := m.tronAPI.GetUSDTTransactionsByTimeRange(ctx, address, thirtyDaysAgo, now, 1000)
+	trc20Txs, err := m.tronAPI.GetUSDTTransactionsByTimeRange(ctx, address, params, 1000)
 	if err != nil {
 		return nil, fmt.Errorf("获取地址 %s 交易历史失败: %v", address, err)
 	}
